@@ -1,1 +1,4 @@
 .expo
+deploy_vps.py
+.env*
+*.local
