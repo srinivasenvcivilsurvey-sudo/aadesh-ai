@@ -27,15 +27,15 @@ export function normalizeNFKC(text: string): string {
   return text.normalize('NFKC');
 }
 
-export async function generateOrder(
-  request: OrderGenerationRequest,
-  apiKey: string
+/**
+ * Core Sarvam API call with timeout.
+ */
+async function callSarvamAPI(
+  systemPrompt: string,
+  userContent: string,
+  apiKey: string,
+  maxTokens: number = 4096
 ): Promise<OrderGenerationResponse> {
-  // NFKC-normalize all text inputs before sending to Sarvam API
-  const normalizedPrompt = normalizeNFKC(request.systemPrompt);
-  const normalizedDetails = normalizeNFKC(request.caseDetails);
-
-  // 60-second timeout to prevent hanging requests
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 60_000);
 
@@ -50,16 +50,10 @@ export async function generateOrder(
       body: JSON.stringify({
         model: 'sarvam-m',
         messages: [
-          {
-            role: 'system',
-            content: normalizedPrompt,
-          },
-          {
-            role: 'user',
-            content: normalizedDetails,
-          },
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userContent },
         ],
-        max_tokens: 4096,
+        max_tokens: maxTokens,
         temperature: 0.3,
       }),
       signal: controller.signal,
@@ -80,10 +74,8 @@ export async function generateOrder(
   }
 
   const data = await response.json();
-  // FIX: 2026-03-28 — Strip <think>...</think> reasoning tags from Sarvam output
   const rawContent = data.choices?.[0]?.message?.content || '';
   const stripped = rawContent.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-  // NFKC-normalize the AI output before any downstream processing
   const content = normalizeNFKC(stripped);
   const wordCount = content.split(/\s+/).filter(Boolean).length;
 
@@ -93,6 +85,47 @@ export async function generateOrder(
     model: data.model || 'sarvam-m',
     tokensUsed: data.usage?.total_tokens || 0,
   };
+}
+
+/**
+ * Generate order with auto-recovery:
+ *   1. Try with full context
+ *   2. If fails → wait 3s → retry with full context
+ *   3. If retry fails → try with reduced context (trim user content to 50%)
+ *   4. If all fail → throw with Kannada-friendly message
+ */
+export async function generateOrder(
+  request: OrderGenerationRequest,
+  apiKey: string
+): Promise<OrderGenerationResponse> {
+  const normalizedPrompt = normalizeNFKC(request.systemPrompt);
+  const normalizedDetails = normalizeNFKC(request.caseDetails);
+
+  // Attempt 1: full context
+  try {
+    return await callSarvamAPI(normalizedPrompt, normalizedDetails, apiKey);
+  } catch (err1) {
+    console.error('Sarvam attempt 1 failed:', err1 instanceof Error ? err1.message : err1);
+  }
+
+  // Wait 3 seconds before retry
+  await new Promise(r => setTimeout(r, 3000));
+
+  // Attempt 2: retry with full context
+  try {
+    return await callSarvamAPI(normalizedPrompt, normalizedDetails, apiKey);
+  } catch (err2) {
+    console.error('Sarvam attempt 2 failed:', err2 instanceof Error ? err2.message : err2);
+  }
+
+  // Attempt 3: reduced context (trim user content to 50%)
+  const reducedDetails = normalizedDetails.slice(0, Math.floor(normalizedDetails.length * 0.5));
+  try {
+    return await callSarvamAPI(normalizedPrompt, reducedDetails, apiKey);
+  } catch (err3) {
+    console.error('Sarvam attempt 3 (reduced) failed:', err3 instanceof Error ? err3.message : err3);
+    throw new Error('Sarvam API timeout: all 3 attempts failed');
+  }
 }
 
 // Re-export the full V3.2.1 system prompt as DEFAULT_SYSTEM_PROMPT

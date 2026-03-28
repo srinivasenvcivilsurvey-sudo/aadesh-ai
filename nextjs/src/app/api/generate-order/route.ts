@@ -3,6 +3,7 @@ import { generateOrder, DEFAULT_SYSTEM_PROMPT, normalizeNFKC } from '@/lib/sarva
 import { runGuardrails } from '@/lib/guardrails';
 import { createClient } from '@supabase/supabase-js';
 import { checkRateLimit } from '@/lib/rateLimit';
+import { getSmartContext, buildContextBlock } from '@/lib/smart-context';
 
 const MAX_INPUT_LENGTH = 10_000; // characters
 
@@ -96,15 +97,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ── GENERATE ORDER ───────────────────────────────────
+    // ── SMART-CONTEXT: fetch best reference orders ───────
     const normalizedCaseDetails = normalizeNFKC(caseDetails);
 
+    const smartContext = await getSmartContext(adminClient, user.id, orderType, normalizedCaseDetails);
+    const contextBlock = buildContextBlock(smartContext);
+
+    // Combine context + user input
+    const enrichedInput = contextBlock + normalizedCaseDetails;
+
+    // ── GENERATE ORDER ───────────────────────────────────
     const startTime = Date.now();
     const result = await generateOrder(
       {
         orderType,
-        caseDetails: normalizedCaseDetails,
-        // Always use server-side system prompt (never accept from client)
+        caseDetails: enrichedInput,
         systemPrompt: DEFAULT_SYSTEM_PROMPT,
       },
       sarvamKey
@@ -166,6 +173,9 @@ export async function POST(request: NextRequest) {
         generationTime: `${generationTime}s`,
         generatedAt: new Date().toISOString(),
         creditsRemaining: profile.credits_remaining - 1,
+        refsUsed: smartContext.refsUsed,
+        totalRefs: smartContext.totalRefs,
+        refSource: smartContext.source,
       },
       guardrails: {
         results: guardrails.results,
