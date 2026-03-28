@@ -49,12 +49,13 @@ export async function generateOrder(
   }
 
   const data = await response.json();
-  const content = data.choices?.[0]?.message?.content || '';
-    const cleanContent = content.replace(/[\s\S]*?<\/think>/g, '').trim();
-  const wordCount = cleanContent.split(/\s+/).filter(Boolean).length;
+  // FIX: 2026-03-28 — Sarvam returns <think>...</think> reasoning tags before order text. Strip them.
+  const rawContent = data.choices?.[0]?.message?.content || '';
+  const content = rawContent.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+  const wordCount = content.split(/\s+/).filter(Boolean).length;
 
   return {
-    cleanContent,
+    content,
     wordCount,
     model: data.model || 'sarvam-m',
     tokensUsed: data.usage?.total_tokens || 0,
