@@ -9,7 +9,7 @@ import {
     X,
     ChevronDown,
     LogOut,
-    Key, Files, LucideListTodo,
+    Key, Files, FileText, CreditCard, Upload,
 } from 'lucide-react';
 import { useGlobal } from "@/lib/context/GlobalContext";
 import { createSPASassClient } from "@/lib/supabase/client";
@@ -42,13 +42,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             : parts[0].slice(0, 2).toUpperCase();
     };
 
-    const productName = process.env.NEXT_PUBLIC_PRODUCTNAME;
-
     const navigation = [
-        { name: 'Homepage', href: '/app', icon: Home },
-        { name: 'Example Storage', href: '/app/storage', icon: Files },
-        { name: 'Example Table', href: '/app/table', icon: LucideListTodo },
-        { name: 'User Settings', href: '/app/user-settings', icon: User },
+        { name: 'ಮುಖಪುಟ', href: '/app', icon: Home },
+        { name: 'ಆದೇಶ ರಚಿಸಿ', href: '/app/generate', icon: FileText },
+        { name: 'ನನ್ನ ಫೈಲ್‌ಗಳು', href: '/app/storage', icon: Files },
+        { name: 'ಆದೇಶ ಅಪ್‌ಲೋಡ್', href: '/app/upload', icon: Upload },
+        { name: 'ಬಿಲ್ಲಿಂಗ್', href: '/app/billing', icon: CreditCard },
+        { name: 'ಸೆಟ್ಟಿಂಗ್‌ಗಳು', href: '/app/user-settings', icon: User },
     ];
 
     const toggleSidebar = () => setSidebarOpen(!isSidebarOpen);
@@ -67,7 +67,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
 
                 <div className="h-16 flex items-center justify-between px-4 border-b">
-                    <span className="text-xl font-semibold text-primary-600">{productName}</span>
+                    <span className="text-xl font-semibold text-primary-600">ಆದೇಶ AI</span>
                     <button
                         onClick={toggleSidebar}
                         className="lg:hidden text-gray-500 hover:text-gray-700"
@@ -143,7 +143,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                         className="w-full flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                                     >
                                         <Key className="mr-3 h-4 w-4 text-gray-400"/>
-                                        Change Password
+                                        ಪಾಸ್‌ವರ್ಡ್ ಬದಲಿಸಿ
                                     </button>
                                     <button
                                         onClick={() => {
@@ -153,7 +153,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                         className="w-full flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50"
                                     >
                                         <LogOut className="mr-3 h-4 w-4 text-red-400"/>
-                                        Sign Out
+                                        ಹೊರಬನ್ನಿ
                                     </button>
                                 </div>
                             </div>

@@ -4,10 +4,9 @@ import { Analytics } from '@vercel/analytics/next';
 import CookieConsent from "@/components/Cookies";
 import { GoogleAnalytics } from '@next/third-parties/google'
 
-
 export const metadata: Metadata = {
-  title: process.env.NEXT_PUBLIC_PRODUCTNAME,
-  description: "The best way to build your SaaS product.",
+  title: "ಆದೇಶ AI — Aadesh AI",
+  description: "AI-powered order drafting for Karnataka land record offices. ಕರ್ನಾಟಕ ಭೂದಾಖಲೆ ಕಚೇರಿಗಳಿಗೆ AI ಆದೇಶ ಕರಡು.",
 };
 
 export default function RootLayout({
@@ -15,13 +14,13 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  let theme = process.env.NEXT_PUBLIC_THEME
+  let theme = process.env.NEXT_PUBLIC_THEME;
   if(!theme) {
     theme = "theme-sass3"
   }
   const gaID = process.env.NEXT_PUBLIC_GOOGLE_TAG;
   return (
-    <html lang="en">
+    <html lang="kn">
     <body className={theme}>
       {children}
       <Analytics />
@@ -29,7 +28,6 @@ export default function RootLayout({
       { gaID && (
           <GoogleAnalytics gaId={gaID}/>
       )}
-
     </body>
     </html>
   );

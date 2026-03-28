@@ -1,45 +1,93 @@
 export interface PricingTier {
     name: string;
+    nameKn: string;
     price: number;
+    orders: number;
+    perOrder: string;
     description: string;
     features: string[];
     popular?: boolean;
 }
 
 class PricingService {
-    private static tiers: PricingTier[] = [];
-
-    static initialize() {
-        const names = process.env.NEXT_PUBLIC_TIERS_NAMES?.split(',') || [];
-        const prices = process.env.NEXT_PUBLIC_TIERS_PRICES?.split(',').map(Number) || [];
-        const descriptions = process.env.NEXT_PUBLIC_TIERS_DESCRIPTIONS?.split(',') || [];
-        const features = process.env.NEXT_PUBLIC_TIERS_FEATURES?.split(',').map(f => f.split('|')) || [];
-        const popularTier = process.env.NEXT_PUBLIC_POPULAR_TIER;
-
-        this.tiers = names.map((name, index) => ({
-            name,
-            price: prices[index],
-            description: descriptions[index],
-            features: features[index] || [],
-            popular: name === popularTier
-        }));
-    }
+    private static tiers: PricingTier[] = [
+        {
+            name: 'Pack A',
+            nameKn: 'ಪ್ಯಾಕ್ A',
+            price: 499,
+            orders: 30,
+            perOrder: '₹16.6',
+            description: 'ಸಣ್ಣ ಕಚೇರಿಗಳಿಗೆ',
+            features: [
+                '30 AI ಆದೇಶ ಕರಡುಗಳು',
+                'DOCX & PDF ಡೌನ್‌ಲೋಡ್',
+                'ಸರಕಾರಿ ಕನ್ನಡ',
+            ],
+        },
+        {
+            name: 'Pack B',
+            nameKn: 'ಪ್ಯಾಕ್ B',
+            price: 999,
+            orders: 75,
+            perOrder: '₹13.3',
+            description: 'ಮಧ್ಯಮ ಕಚೇರಿಗಳಿಗೆ',
+            features: [
+                '75 AI ಆದೇಶ ಕರಡುಗಳು',
+                'DOCX & PDF ಡೌನ್‌ಲೋಡ್',
+                'ಸರಕಾರಿ ಕನ್ನಡ',
+                'ಆದ್ಯತೆ ಬೆಂಬಲ',
+            ],
+        },
+        {
+            name: 'Pack C',
+            nameKn: 'ಪ್ಯಾಕ್ C',
+            price: 1999,
+            orders: 200,
+            perOrder: '₹10.0',
+            description: 'ದೊಡ್ಡ ಕಚೇರಿಗಳಿಗೆ',
+            features: [
+                '200 AI ಆದೇಶ ಕರಡುಗಳು',
+                'DOCX & PDF ಡೌನ್‌ಲೋಡ್',
+                'ಸರಕಾರಿ ಕನ್ನಡ',
+                'ಆದ್ಯತೆ ಬೆಂಬಲ',
+                'ಬಹು-ಮಾಡೆಲ್ ಆಯ್ಕೆ',
+            ],
+            popular: true,
+        },
+        {
+            name: 'Pack D',
+            nameKn: 'ಪ್ಯಾಕ್ D',
+            price: 4999,
+            orders: 600,
+            perOrder: '₹8.3',
+            description: 'ವಾರ್ಷಿಕ — ಅತ್ಯುತ್ತಮ ಮೌಲ್ಯ',
+            features: [
+                '600 AI ಆದೇಶ ಕರಡುಗಳು',
+                'DOCX & PDF ಡೌನ್‌ಲೋಡ್',
+                'ಸರಕಾರಿ ಕನ್ನಡ',
+                'ಆದ್ಯತೆ ಬೆಂಬಲ',
+                'ಬಹು-ಮಾಡೆಲ್ ಆಯ್ಕೆ',
+                'ವೈಯಕ್ತಿಕ ಶೈಲಿ ಕಲಿಕೆ',
+            ],
+        },
+    ];
 
     static getAllTiers(): PricingTier[] {
-        if (this.tiers.length === 0) {
-            this.initialize();
-        }
         return this.tiers;
     }
 
     static getCommonFeatures(): string[] {
-        return process.env.NEXT_PUBLIC_COMMON_FEATURES?.split(',') || [];
+        return [
+            'ಸುರಕ್ಷಿತ ಲಾಗಿನ್',
+            'ಎನ್‌ಕ್ರಿಪ್ಟೆಡ್ ಸಂಗ್ರಹ',
+            '7 ನಿಖರತೆ ರಕ್ಷಣೆಗಳು',
+            '13-ವಿಭಾಗ ಆದೇಶ ರಚನೆ',
+        ];
     }
 
     static formatPrice(price: number): string {
-        return `$${price}`;
+        return `₹${price.toLocaleString('en-IN')}`;
     }
-
 }
 
 export default PricingService;
