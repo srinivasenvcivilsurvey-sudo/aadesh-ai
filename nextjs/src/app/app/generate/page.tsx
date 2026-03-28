@@ -28,14 +28,16 @@ interface OrderMetadata {
   model: string;
   tokensUsed: number;
   generationTime?: string;
+  creditsRemaining?: number;
 }
 
 export default function GenerateOrderPage() {
-  useGlobal(); // ensure user is loaded
+  const { refreshProfile } = useGlobal();
   const [orderType, setOrderType] = useState<'appeal' | 'suo_motu'>('appeal');
   const [caseDetails, setCaseDetails] = useState('');
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [generatedOrder, setGeneratedOrder] = useState('');
   const [metadata, setMetadata] = useState<OrderMetadata | null>(null);
   const [guardrails, setGuardrails] = useState<GuardrailReport | null>(null);
@@ -112,6 +114,8 @@ export default function GenerateOrderPage() {
       if (data.guardrails) {
         setGuardrails(data.guardrails);
       }
+      // Refresh profile to update credits in sidebar/dashboard
+      await refreshProfile();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'ಆದೇಶ ರಚನೆ ವಿಫಲವಾಯಿತು');
     } finally {
@@ -119,20 +123,55 @@ export default function GenerateOrderPage() {
     }
   };
 
-  const handleDownload = (format: 'docx' | 'pdf') => {
+  const handleDownload = async (format: 'docx' | 'pdf') => {
     if (!verified) {
       setError(t(strings.result.mustVerify, locale));
       return;
     }
 
-    // Create a text blob for now — full DOCX/PDF generation will use server-side endpoint
-    const blob = new Blob([generatedOrder], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `aadesh_order_${new Date().toISOString().split('T')[0]}.${format === 'docx' ? 'txt' : 'txt'}`;
-    a.click();
-    URL.revokeObjectURL(url);
+    setDownloading(true);
+    setError('');
+
+    try {
+      const client = await createSPASassClientAuthenticated();
+      const supabase = client.getSupabaseClient();
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        setError('ಸೆಷನ್ ಮುಕ್ತಾಯವಾಗಿದೆ. ದಯವಿಟ್ಟು ಮರುಲಾಗಿನ್ ಮಾಡಿ.');
+        return;
+      }
+
+      const response = await fetch('/api/download', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          orderText: generatedOrder,
+          format,
+          orderType,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Download failed');
+      }
+
+      // Download the file
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `aadesh_order_${new Date().toISOString().split('T')[0]}.${format}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'ಡೌನ್‌ಲೋಡ್ ವಿಫಲವಾಯಿತು');
+    } finally {
+      setDownloading(false);
+    }
   };
 
   return (
@@ -330,26 +369,26 @@ export default function GenerateOrderPage() {
             <div className="flex gap-4">
               <button
                 onClick={() => handleDownload('docx')}
-                disabled={!verified}
+                disabled={!verified || downloading}
                 className={`flex-1 py-3 px-4 rounded-lg font-medium flex items-center justify-center gap-2 transition-colors ${
-                  verified
+                  verified && !downloading
                     ? 'bg-blue-600 text-white hover:bg-blue-700'
                     : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                 }`}
               >
-                <Download className="h-5 w-5" />
+                {downloading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
                 {t(strings.result.downloadDocx, locale)}
               </button>
               <button
                 onClick={() => handleDownload('pdf')}
-                disabled={!verified}
+                disabled={!verified || downloading}
                 className={`flex-1 py-3 px-4 rounded-lg font-medium flex items-center justify-center gap-2 transition-colors ${
-                  verified
+                  verified && !downloading
                     ? 'bg-red-600 text-white hover:bg-red-700'
                     : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                 }`}
               >
-                <Download className="h-5 w-5" />
+                {downloading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
                 {t(strings.result.downloadPdf, locale)}
               </button>
             </div>

@@ -1,27 +1,23 @@
 "use client";
 import React, { useState } from 'react';
 import Link from 'next/link';
-import {usePathname, useRouter} from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
-    Home,
-    User,
-    Menu,
-    X,
-    ChevronDown,
-    LogOut,
-    Key, Files, FileText, CreditCard, Upload,
+    Home, User, Menu, X, ChevronDown, LogOut,
+    Key, Files, FileText, CreditCard, Upload, Brain, Globe,
 } from 'lucide-react';
 import { useGlobal } from "@/lib/context/GlobalContext";
+import { useLanguage } from "@/lib/context/LanguageContext";
 import { createSPASassClient } from "@/lib/supabase/client";
+import strings, { t } from '@/lib/i18n';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
     const [isSidebarOpen, setSidebarOpen] = useState(false);
     const [isUserDropdownOpen, setUserDropdownOpen] = useState(false);
     const pathname = usePathname();
     const router = useRouter();
-
-
     const { user } = useGlobal();
+    const { locale, toggleLocale } = useLanguage();
 
     const handleLogout = async () => {
         try {
@@ -31,8 +27,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             console.error('Error logging out:', error);
         }
     };
+
     const handleChangePassword = async () => {
-        router.push('/app/user-settings')
+        router.push('/app/user-settings');
     };
 
     const getInitials = (email: string) => {
@@ -43,12 +40,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     };
 
     const navigation = [
-        { name: 'ಮುಖಪುಟ', href: '/app', icon: Home },
-        { name: 'ಆದೇಶ ರಚಿಸಿ', href: '/app/generate', icon: FileText },
-        { name: 'ನನ್ನ ಫೈಲ್‌ಗಳು', href: '/app/storage', icon: Files },
-        { name: 'ಆದೇಶ ಅಪ್‌ಲೋಡ್', href: '/app/upload', icon: Upload },
-        { name: 'ಬಿಲ್ಲಿಂಗ್', href: '/app/billing', icon: CreditCard },
-        { name: 'ಸೆಟ್ಟಿಂಗ್‌ಗಳು', href: '/app/user-settings', icon: User },
+        { name: t(strings.nav.dashboard, locale), href: '/app', icon: Home },
+        { name: t(strings.nav.trainAI, locale), href: '/app/train', icon: Brain },
+        { name: t(strings.nav.generateOrder, locale), href: '/app/generate', icon: FileText },
+        { name: t(strings.nav.myOrders, locale), href: '/app/my-orders', icon: Files },
+        { name: t(strings.nav.myFiles, locale), href: '/app/storage', icon: Upload },
+        { name: t(strings.nav.billing, locale), href: '/app/billing', icon: CreditCard },
+        { name: t(strings.nav.settings, locale), href: '/app/user-settings', icon: User },
     ];
 
     const toggleSidebar = () => setSidebarOpen(!isSidebarOpen);
@@ -63,11 +61,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             )}
 
             {/* Sidebar */}
-            <div className={`fixed inset-y-0 left-0 w-64 bg-white shadow-lg transform transition-transform duration-200 ease-in-out z-30 
+            <div className={`fixed inset-y-0 left-0 w-64 bg-white shadow-lg transform transition-transform duration-200 ease-in-out z-30
                 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
 
                 <div className="h-16 flex items-center justify-between px-4 border-b">
-                    <span className="text-xl font-semibold text-primary-600">ಆದೇಶ AI</span>
+                    <span className="text-xl font-semibold text-primary-600">
+                        {t(strings.productName, locale)}
+                    </span>
                     <button
                         onClick={toggleSidebar}
                         className="lg:hidden text-gray-500 hover:text-gray-700"
@@ -82,7 +82,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                         const isActive = pathname === item.href;
                         return (
                             <Link
-                                key={item.name}
+                                key={item.href}
                                 href={item.href}
                                 className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md ${
                                     isActive
@@ -101,6 +101,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     })}
                 </nav>
 
+                {/* Language Toggle — bottom of sidebar */}
+                <div className="absolute bottom-4 left-0 right-0 px-4">
+                    <button
+                        onClick={toggleLocale}
+                        className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+                    >
+                        <Globe className="h-4 w-4 text-gray-500" />
+                        <span className={locale === 'en' ? 'font-bold' : 'text-gray-500'}>EN</span>
+                        <span className="text-gray-300">|</span>
+                        <span className={locale === 'kn' ? 'font-bold' : 'text-gray-500'}>ಕನ್ನಡ</span>
+                    </button>
+                </div>
             </div>
 
             <div className="lg:pl-64">
@@ -109,8 +121,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                         onClick={toggleSidebar}
                         className="lg:hidden text-gray-500 hover:text-gray-700"
                     >
-                        <Menu className="h-6 w-6"/>
+                        <Menu className="h-6 w-6" />
                     </button>
+
+                    {/* Language toggle in header (visible on desktop) */}
+                    <div className="hidden lg:flex items-center">
+                        <button
+                            onClick={toggleLocale}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full border border-gray-200 hover:bg-gray-50 transition-colors"
+                        >
+                            <Globe className="h-3.5 w-3.5 text-gray-500" />
+                            <span className={locale === 'en' ? 'font-bold text-primary-600' : 'text-gray-500'}>EN</span>
+                            <span className="text-gray-300">|</span>
+                            <span className={locale === 'kn' ? 'font-bold text-primary-600' : 'text-gray-500'}>ಕನ್ನಡ</span>
+                        </button>
+                    </div>
 
                     <div className="relative ml-auto">
                         <button
@@ -122,14 +147,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                     {user ? getInitials(user.email) : '??'}
                                 </span>
                             </div>
-                            <span>{user?.email || 'Loading...'}</span>
-                            <ChevronDown className="h-4 w-4"/>
+                            <span className="hidden sm:inline">{user?.email || t(strings.common.loading, locale)}</span>
+                            <ChevronDown className="h-4 w-4" />
                         </button>
 
                         {isUserDropdownOpen && (
-                            <div className="absolute right-0 mt-2 w-64 bg-white rounded-md shadow-lg border">
+                            <div className="absolute right-0 mt-2 w-64 bg-white rounded-md shadow-lg border z-50">
                                 <div className="p-2 border-b border-gray-100">
-                                    <p className="text-xs text-gray-500">Signed in as</p>
+                                    <p className="text-xs text-gray-500">{t(strings.nav.signedInAs, locale)}</p>
                                     <p className="text-sm font-medium text-gray-900 truncate">
                                         {user?.email}
                                     </p>
@@ -138,12 +163,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                     <button
                                         onClick={() => {
                                             setUserDropdownOpen(false);
-                                            handleChangePassword()
+                                            handleChangePassword();
                                         }}
                                         className="w-full flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                                     >
-                                        <Key className="mr-3 h-4 w-4 text-gray-400"/>
-                                        ಪಾಸ್‌ವರ್ಡ್ ಬದಲಿಸಿ
+                                        <Key className="mr-3 h-4 w-4 text-gray-400" />
+                                        {t(strings.nav.changePassword, locale)}
                                     </button>
                                     <button
                                         onClick={() => {
@@ -152,8 +177,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                         }}
                                         className="w-full flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50"
                                     >
-                                        <LogOut className="mr-3 h-4 w-4 text-red-400"/>
-                                        ಹೊರಬನ್ನಿ
+                                        <LogOut className="mr-3 h-4 w-4 text-red-400" />
+                                        {t(strings.nav.signOut, locale)}
                                     </button>
                                 </div>
                             </div>

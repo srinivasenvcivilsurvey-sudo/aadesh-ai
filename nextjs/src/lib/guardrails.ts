@@ -181,6 +181,31 @@ export function checkFactPreservation(
 }
 
 // ═══════════════════════════════════════════════════════════
+// GUARDRAIL 4: Word Count Check
+// ═══════════════════════════════════════════════════════════
+
+export function checkWordCount(orderText: string): GuardrailResult {
+  const normalized = normalizeNFKC(orderText);
+  const wordCount = normalized.split(/\s+/).filter(Boolean).length;
+  const minWords = 550;
+  const maxWords = 750;
+  const passed = wordCount >= minWords && wordCount <= maxWords;
+
+  return {
+    id: 'word-count',
+    name: 'Word Count',
+    nameKn: 'ಪದ ಎಣಿಕೆ',
+    passed,
+    details: passed
+      ? `${wordCount} words (target: ${minWords}-${maxWords})`
+      : `${wordCount} words (target: ${minWords}-${maxWords})`,
+    detailsKn: passed
+      ? `${wordCount} ಪದಗಳು (ಗುರಿ: ${minWords}-${maxWords})`
+      : `${wordCount} ಪದಗಳು (ಗುರಿ: ${minWords}-${maxWords})`,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════
 // COMBINED GUARDRAIL RUNNER
 // ═══════════════════════════════════════════════════════════
 
@@ -193,6 +218,7 @@ export function runGuardrails(
     checkSectionCompleteness(orderText, orderType),
     checkAntiTransliteration(orderText),
     checkFactPreservation(inputText, orderText),
+    checkWordCount(orderText),
   ];
 
   const allPassed = results.every(r => r.passed);

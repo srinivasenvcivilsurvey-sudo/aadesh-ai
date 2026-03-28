@@ -98,6 +98,22 @@ export async function POST(request: NextRequest) {
 // PUT /api/razorpay — Verify payment and add credits
 export async function PUT(request: NextRequest) {
   try {
+    // ── AUTH CHECK (was missing — security fix) ──────────
+    const authHeader = request.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const token = authHeader.split(' ')[1];
+
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await request.json();
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature, packId } = body;
 
@@ -105,7 +121,11 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Missing payment verification fields' }, { status: 400 });
     }
 
-    // Verify signature
+    if (!(packId in PACKS)) {
+      return NextResponse.json({ error: 'Invalid pack' }, { status: 400 });
+    }
+
+    // ── VERIFY RAZORPAY SIGNATURE ────────────────────────
     const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
     if (!razorpayKeySecret) {
       return NextResponse.json({ error: 'Server error' }, { status: 500 });
@@ -120,11 +140,35 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid payment signature' }, { status: 400 });
     }
 
-    // Payment verified — credits would be added here via Supabase
+    // ── ADD CREDITS VIA SERVICE ROLE ─────────────────────
     const pack = PACKS[packId as keyof typeof PACKS];
 
-    // TODO: Use Supabase service role to add credits
-    // await supabaseAdmin.rpc('add_credits', { user_id, credits: pack.orders })
+    const adminClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
+    // Add credits to profile
+    const { error: rpcError } = await adminClient.rpc('add_credits', {
+      p_user_id: user.id,
+      p_credits: pack.orders,
+    });
+
+    if (rpcError) {
+      console.error('Credit addition error:', rpcError);
+      return NextResponse.json({ error: 'Failed to add credits' }, { status: 500 });
+    }
+
+    // Record transaction
+    await adminClient.from('transactions').insert({
+      user_id: user.id,
+      razorpay_order_id,
+      razorpay_payment_id,
+      pack_name: pack.name,
+      amount_inr: pack.priceInr,
+      credits_added: pack.orders,
+      status: 'completed',
+    });
 
     return NextResponse.json({
       success: true,

@@ -2,17 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateOrder, DEFAULT_SYSTEM_PROMPT, normalizeNFKC } from '@/lib/sarvam';
 import { runGuardrails } from '@/lib/guardrails';
 import { createClient } from '@supabase/supabase-js';
+import { checkRateLimit } from '@/lib/rateLimit';
+
+const MAX_INPUT_LENGTH = 10_000; // characters
 
 export async function POST(request: NextRequest) {
   try {
-    // Get auth token from header
+    // ── AUTH ──────────────────────────────────────────────
     const authHeader = request.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     const token = authHeader.split(' ')[1];
 
-    // Verify user with Supabase
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -22,18 +24,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Parse request body
+    // ── RATE LIMIT ───────────────────────────────────────
+    const rateCheck = checkRateLimit(user.id);
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: 'ದಯವಿಟ್ಟು ಸ್ವಲ್ಪ ಸಮಯದ ನಂತರ ಪ್ರಯತ್ನಿಸಿ (rate limit)' },
+        { status: 429 }
+      );
+    }
+
+    // ── PARSE & VALIDATE INPUT ───────────────────────────
     const body = await request.json();
-    const { orderType, caseDetails, systemPrompt } = body;
+    const { orderType, caseDetails } = body;
 
     if (!orderType || !caseDetails) {
       return NextResponse.json(
-        { error: 'Missing required fields: orderType, caseDetails' },
+        { error: 'ಆದೇಶ ಪ್ರಕಾರ ಮತ್ತು ಪ್ರಕರಣ ವಿವರಗಳು ಅಗತ್ಯ' },
         { status: 400 }
       );
     }
 
-    // Validate order type
     if (!['appeal', 'suo_motu'].includes(orderType)) {
       return NextResponse.json(
         { error: 'Invalid orderType. Must be "appeal" or "suo_motu"' },
@@ -41,39 +51,113 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check Sarvam API key
+    if (caseDetails.length > MAX_INPUT_LENGTH) {
+      return NextResponse.json(
+        { error: `ಇನ್‌ಪುಟ್ ತುಂಬಾ ದೊಡ್ಡದಾಗಿದೆ (ಗರಿಷ್ಠ ${MAX_INPUT_LENGTH} ಅಕ್ಷರಗಳು)` },
+        { status: 400 }
+      );
+    }
+
+    // ── CHECK SARVAM API KEY ─────────────────────────────
     const sarvamKey = process.env.SARVAM_API_KEY;
     if (!sarvamKey) {
+      console.error('SARVAM_API_KEY not configured');
       return NextResponse.json(
-        { error: 'Server configuration error: SARVAM_API_KEY not set' },
+        { error: 'ಸರ್ವರ್ ಕಾನ್ಫಿಗರೇಶನ್ ದೋಷ' },
         { status: 500 }
       );
     }
 
-    // NFKC-normalize user input before processing
+    // ── CHECK CREDITS ────────────────────────────────────
+    // Use service role client for DB operations (bypasses RLS)
+    const adminClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
+    const { data: profile, error: profileError } = await adminClient
+      .from('profiles')
+      .select('credits_remaining')
+      .eq('id', user.id)
+      .single();
+
+    if (profileError || !profile) {
+      console.error('Profile fetch error:', profileError);
+      return NextResponse.json(
+        { error: 'ಪ್ರೊಫೈಲ್ ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ' },
+        { status: 500 }
+      );
+    }
+
+    if (profile.credits_remaining <= 0) {
+      return NextResponse.json(
+        { error: 'ಕ್ರೆಡಿಟ್‌ಗಳು ಖಾಲಿಯಾಗಿವೆ. ದಯವಿಟ್ಟು ರೀಚಾರ್ಜ್ ಮಾಡಿ.' },
+        { status: 402 }
+      );
+    }
+
+    // ── GENERATE ORDER ───────────────────────────────────
     const normalizedCaseDetails = normalizeNFKC(caseDetails);
 
-    // Generate the order using Sarvam 105B
     const startTime = Date.now();
     const result = await generateOrder(
       {
         orderType,
         caseDetails: normalizedCaseDetails,
-        systemPrompt: systemPrompt || DEFAULT_SYSTEM_PROMPT,
+        // Always use server-side system prompt (never accept from client)
+        systemPrompt: DEFAULT_SYSTEM_PROMPT,
       },
       sarvamKey
     );
     const generationTime = ((Date.now() - startTime) / 1000).toFixed(1);
 
-    // Run 3 MVP guardrails on the generated output (all ₹0 — pure regex)
+    // ── RUN GUARDRAILS ───────────────────────────────────
     const guardrails = runGuardrails(result.content, orderType, normalizedCaseDetails);
 
-    // TODO: Deduct credits from user's balance in Supabase
-    // TODO: Save generated order to orders table
+    // ── SAVE ORDER TO DATABASE ───────────────────────────
+    const { data: savedOrder, error: saveError } = await adminClient
+      .from('orders')
+      .insert({
+        user_id: user.id,
+        case_type: orderType,
+        input_text: normalizedCaseDetails,
+        generated_order: result.content,
+        score: guardrails.allPassed ? 90 : 70,
+        model_used: result.model,
+        verified: false,
+      })
+      .select('id')
+      .single();
 
+    if (saveError) {
+      console.error('Order save error:', saveError);
+      // Don't block the response — order was generated successfully
+    }
+
+    // ── DEDUCT 1 CREDIT ──────────────────────────────────
+    const { error: creditError } = await adminClient
+      .from('profiles')
+      .update({
+        credits_remaining: profile.credits_remaining - 1,
+        total_orders_generated: (await adminClient
+          .from('profiles')
+          .select('total_orders_generated')
+          .eq('id', user.id)
+          .single()
+        ).data?.total_orders_generated + 1 || 1,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', user.id);
+
+    if (creditError) {
+      console.error('Credit deduction error:', creditError);
+    }
+
+    // ── RESPOND ──────────────────────────────────────────
     return NextResponse.json({
       success: true,
       order: result.content,
+      orderId: savedOrder?.id || null,
       metadata: {
         wordCount: result.wordCount,
         model: result.model,
@@ -81,6 +165,7 @@ export async function POST(request: NextRequest) {
         orderType,
         generationTime: `${generationTime}s`,
         generatedAt: new Date().toISOString(),
+        creditsRemaining: profile.credits_remaining - 1,
       },
       guardrails: {
         results: guardrails.results,
@@ -91,9 +176,10 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: unknown) {
     console.error('Order generation error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to generate order' },
-      { status: 500 }
-    );
+    // Return Kannada error message to user (never leak server details)
+    const message = error instanceof Error && error.message.includes('timeout')
+      ? 'AI ಸೇವೆ ನಿಧಾನವಾಗಿದೆ. ದಯವಿಟ್ಟು ಮತ್ತೊಮ್ಮೆ ಪ್ರಯತ್ನಿಸಿ.'
+      : 'ಆದೇಶ ರಚನೆ ವಿಫಲವಾಯಿತು. ದಯವಿಟ್ಟು ಮತ್ತೊಮ್ಮೆ ಪ್ರಯತ್ನಿಸಿ.';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

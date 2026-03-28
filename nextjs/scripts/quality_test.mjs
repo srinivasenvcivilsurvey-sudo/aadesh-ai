@@ -29,19 +29,19 @@ if (!SARVAM_API_KEY) {
 }
 
 // ═══════════════════════════════════════════════════
-// System prompt
+// System prompt — V3.2.1 FULL (read from system-prompt.ts export)
+// We read the file and extract the prompt string
 // ═══════════════════════════════════════════════════
-const SYSTEM_PROMPT = `ನೀವು ಕರ್ನಾಟಕ ರಾಜ್ಯದ ಜಿಲ್ಲಾ ಉಪ ವಿಭಾಗಾಧಿಕಾರಿ (DDLR) ಕಚೇರಿಯ ಅನುಭವಿ ಕರಡು ಬರಹಗಾರರು.
-
-ನಿಮ್ಮ ಕೆಲಸ: ಒದಗಿಸಿದ ಪ್ರಕರಣ ವಿವರಗಳ ಆಧಾರದ ಮೇಲೆ ಸರಕಾರಿ ಕನ್ನಡದಲ್ಲಿ ಆದೇಶ ಕರಡನ್ನು ರಚಿಸಿ.
-
-ನಿಯಮಗಳು:
-1. ಸರಕಾರಿ ಕನ್ನಡ ಮಾತ್ರ ಬಳಸಿ - ಇಂಗ್ಲಿಷ್ ಲಿಪ್ಯಂತರ ಮಾಡಬೇಡಿ
-2. 13 ವಿಭಾಗಗಳನ್ನು ಅನುಸರಿಸಿ (ಮೇಲ್ಮನವಿ ಆದೇಶಗಳಿಗೆ)
-3. 550-700 ಪದಗಳ ನಡುವೆ ಇರಿಸಿ
-4. ಪ್ರತಿ ಇನ್‌ಪುಟ್ ವಿವರವನ್ನು ಔಟ್‌ಪುಟ್‌ನಲ್ಲಿ ಸಂರಕ್ಷಿಸಿ
-5. ಹೆಸರು, ದಿನಾಂಕ, ಸ್ಥಳಗಳನ್ನು ಕಲ್ಪಿಸಬೇಡಿ
-6. ಎದುರುದಾರರು ಎಂದು ಮಾತ್ರ ಬಳಸಿ (ಪ್ರತಿವಾದಿ ಅಲ್ಲ)`;
+const promptFile = readFileSync(resolve(__dirname, '..', 'src', 'lib', 'system-prompt.ts'), 'utf-8');
+// Extract the template literal between backticks after SYSTEM_PROMPT_V321 =
+const promptMatch = promptFile.match(/const SYSTEM_PROMPT_V321 = `([\s\S]*?)`;/);
+if (!promptMatch) { console.error('Could not extract system prompt from system-prompt.ts'); process.exit(1); }
+let SYSTEM_PROMPT = promptMatch[1]
+  .replace(/\[OFFICER_NAME\]/g, '___')
+  .replace(/\[DISTRICT_AND_CITY\]/g, 'ಬೆಂಗಳೂರು ನಗರ ಜಿಲ್ಲೆ, ಬೆಂಗಳೂರು')
+  .replace(/\[OFFICER_SALUTATION\]/g, 'ಶ್ರೀ/ಶ್ರೀಮತಿ')
+  .replace(/\[OFFICER_QUALIFICATIONS\]/g, 'ಕ.ಆ.ಸೇ');
+console.log(`System prompt loaded: ${SYSTEM_PROMPT.length} chars (V3.2.1 full)`);
 
 // ═══════════════════════════════════════════════════
 // 9 Test Cases

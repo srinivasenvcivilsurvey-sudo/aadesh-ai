@@ -35,28 +35,44 @@ export async function generateOrder(
   const normalizedPrompt = normalizeNFKC(request.systemPrompt);
   const normalizedDetails = normalizeNFKC(request.caseDetails);
 
-  const response = await fetch(SARVAM_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: 'sarvam-m',
-      messages: [
-        {
-          role: 'system',
-          content: normalizedPrompt,
-        },
-        {
-          role: 'user',
-          content: normalizedDetails,
-        },
-      ],
-      max_tokens: 4096,
-      temperature: 0.3,
-    }),
-  });
+  // 60-second timeout to prevent hanging requests
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60_000);
+
+  let response: Response;
+  try {
+    response = await fetch(SARVAM_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'sarvam-m',
+        messages: [
+          {
+            role: 'system',
+            content: normalizedPrompt,
+          },
+          {
+            role: 'user',
+            content: normalizedDetails,
+          },
+        ],
+        max_tokens: 4096,
+        temperature: 0.3,
+      }),
+      signal: controller.signal,
+    });
+  } catch (err: unknown) {
+    clearTimeout(timeout);
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error('Sarvam API timeout: request took longer than 60 seconds');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!response.ok) {
     const errorBody = await response.text();
@@ -79,15 +95,8 @@ export async function generateOrder(
   };
 }
 
-// Default system prompt for DDLR orders
-export const DEFAULT_SYSTEM_PROMPT = `ನೀವು ಕರ್ನಾಟಕ ರಾಜ್ಯದ ಜಿಲ್ಲಾ ಉಪ ವಿಭಾಗಾಧಿಕಾರಿ (DDLR) ಕಚೇರಿಯ ಅನುಭವಿ ಕರಡು ಬರಹಗಾರರು.
-
-ನಿಮ್ಮ ಕೆಲಸ: ಒದಗಿಸಿದ ಪ್ರಕರಣ ವಿವರಗಳ ಆಧಾರದ ಮೇಲೆ ಸರಕಾರಿ ಕನ್ನಡದಲ್ಲಿ ಆದೇಶ ಕರಡನ್ನು ರಚಿಸಿ.
-
-ನಿಯಮಗಳು:
-1. ಸರಕಾರಿ ಕನ್ನಡ ಮಾತ್ರ ಬಳಸಿ - ಇಂಗ್ಲಿಷ್ ಲಿಪ್ಯಂತರ ಮಾಡಬೇಡಿ
-2. 13 ವಿಭಾಗಗಳನ್ನು ಅನುಸರಿಸಿ (ಮೇಲ್ಮನವಿ ಆದೇಶಗಳಿಗೆ)
-3. 550-700 ಪದಗಳ ನಡುವೆ ಇರಿಸಿ
-4. ಪ್ರತಿ ಇನ್‌ಪುಟ್ ವಿವರವನ್ನು ಔಟ್‌ಪುಟ್‌ನಲ್ಲಿ ಸಂರಕ್ಷಿಸಿ
-5. ಹೆಸರು, ದಿನಾಂಕ, ಸ್ಥಳಗಳನ್ನು ಕಲ್ಪಿಸಬೇಡಿ
-6. ಎದುರುದಾರರು ಎಂದು ಮಾತ್ರ ಬಳಸಿ (ಪ್ರತಿವಾದಿ ಅಲ್ಲ)`;
+// Re-export the full V3.2.1 system prompt as DEFAULT_SYSTEM_PROMPT
+// The basic 6-rule prompt has been replaced with the full 382-line production prompt
+export { buildSystemPrompt as buildFullSystemPrompt } from './system-prompt';
+import { buildSystemPrompt } from './system-prompt';
+export const DEFAULT_SYSTEM_PROMPT = buildSystemPrompt();
