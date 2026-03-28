@@ -45,6 +45,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // ── AUDIT LOG (DPDP compliance) ──────────────────────
+    const adminClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+    // Fire and forget — don't block download on audit log
+    adminClient.from('audit_log').insert({
+      user_id: user.id,
+      action: `verified_and_downloaded_${format}`,
+      ip_address: request.headers.get('x-real-ip') || request.headers.get('x-forwarded-for') || 'unknown',
+      user_agent: request.headers.get('user-agent') || 'unknown',
+      metadata: { format, orderType, wordCount: orderText.split(/\s+/).length },
+    }).then(({ error: auditErr }) => { if (auditErr) console.error('Audit log error:', auditErr); });
+
     // ── GENERATE DOCUMENT ────────────────────────────────
     if (format === 'docx') {
       const buffer = await generateDocx(orderText, orderType);
@@ -73,7 +87,7 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     console.error('Download error:', error);
     return NextResponse.json(
-      { error: 'ಡೌನ್‌ಲೋಡ್ ವಿಫಲವಾಯಿತು' },
+      { error: 'ಡೌನ್\u200Cಲೋಡ್ ವಿಫಲವಾಯಿತು' },
       { status: 500 }
     );
   }

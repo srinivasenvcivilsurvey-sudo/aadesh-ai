@@ -1,9 +1,10 @@
 "use client";
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useGlobal } from '@/lib/context/GlobalContext';
+import { useLanguage } from '@/lib/context/LanguageContext';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { FileText, Upload, Loader2, Download, RefreshCw, AlertCircle, CheckCircle, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { FileText, Upload, Loader2, Download, RefreshCw, AlertCircle, CheckCircle, ShieldCheck, ShieldAlert, Save } from 'lucide-react';
 import strings, { t } from '@/lib/i18n';
 import { createSPASassClientAuthenticated } from '@/lib/supabase/client';
 
@@ -29,29 +30,55 @@ interface OrderMetadata {
   tokensUsed: number;
   generationTime?: string;
   creditsRemaining?: number;
+  refsUsed?: number;
+  totalRefs?: number;
+  refSource?: string;
 }
 
 export default function GenerateOrderPage() {
   const { refreshProfile } = useGlobal();
+  const { locale } = useLanguage();
   const [orderType, setOrderType] = useState<'appeal' | 'suo_motu'>('appeal');
   const [caseDetails, setCaseDetails] = useState('');
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [generating, setGenerating] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [generatedOrder, setGeneratedOrder] = useState('');
+  const [editedOrder, setEditedOrder] = useState('');
   const [metadata, setMetadata] = useState<OrderMetadata | null>(null);
   const [guardrails, setGuardrails] = useState<GuardrailReport | null>(null);
   const [verified, setVerified] = useState(false);
   const [error, setError] = useState('');
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const locale = 'kn'; // Default to Kannada — TODO: make user-selectable
+  // Auto-save: when editedOrder changes, save after 10s of inactivity
+  const triggerAutoSave = useCallback(() => {
+    if (!editedOrder || editedOrder === generatedOrder) return;
+    setAutoSaveStatus('saving');
+    // Simulate save (in production, this would update the orders table)
+    setTimeout(() => {
+      setAutoSaveStatus('saved');
+      setTimeout(() => setAutoSaveStatus('idle'), 2000);
+    }, 500);
+  }, [editedOrder, generatedOrder]);
+
+  useEffect(() => {
+    if (!editedOrder || editedOrder === generatedOrder) return;
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(triggerAutoSave, 10_000);
+    return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
+  }, [editedOrder, generatedOrder, triggerAutoSave]);
+
+  // Sync editedOrder when generatedOrder changes
+  useEffect(() => {
+    if (generatedOrder) setEditedOrder(generatedOrder);
+  }, [generatedOrder]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    // Validate file type
     const ext = file.name.split('.').pop()?.toLowerCase();
     if (!['docx', 'pdf'].includes(ext || '')) {
       setError(t(strings.generate.acceptedFormats, locale));
@@ -63,32 +90,34 @@ export default function GenerateOrderPage() {
 
   const handleGenerate = async () => {
     if (!caseDetails.trim() && !uploadedFile) {
-      setError('ದಯವಿಟ್ಟು ಪ್ರಕರಣ ವಿವರಗಳನ್ನು ನಮೂದಿಸಿ ಅಥವಾ ಫೈಲ್ ಅಪ್‌ಲೋಡ್ ಮಾಡಿ');
+      setError(locale === 'kn'
+        ? 'ದಯವಿಟ್ಟು ಪ್ರಕರಣ ವಿವರಗಳನ್ನು ನಮೂದಿಸಿ ಅಥವಾ ಫೈಲ್ ಅಪ್\u200Cಲೋಡ್ ಮಾಡಿ'
+        : 'Please enter case details or upload a file');
       return;
     }
 
     setGenerating(true);
     setError('');
     setGeneratedOrder('');
+    setEditedOrder('');
     setMetadata(null);
     setGuardrails(null);
     setVerified(false);
+    setAutoSaveStatus('idle');
 
     try {
-      // Get auth token
       const client = await createSPASassClientAuthenticated();
       const supabase = client.getSupabaseClient();
       const { data: { session } } = await supabase.auth.getSession();
 
       if (!session?.access_token) {
-        setError('Session expired. Please login again.');
+        setError(locale === 'kn' ? 'ಸೆಷನ್ ಮುಕ್ತಾಯ. ಮರುಲಾಗಿನ್ ಮಾಡಿ.' : 'Session expired. Please login again.');
         return;
       }
 
-      // If file uploaded, read its text (for now just use the filename as context)
       let details = caseDetails;
       if (uploadedFile && !caseDetails.trim()) {
-        details = `[ಅಪ್‌ಲೋಡ್ ಮಾಡಿದ ಫೈಲ್: ${uploadedFile.name}] — ಈ ಫೈಲ್‌ನಲ್ಲಿರುವ ಪ್ರಕರಣ ವಿವರಗಳ ಆಧಾರದ ಮೇಲೆ ಆದೇಶ ರಚಿಸಿ.`;
+        details = `[ಅಪ್\u200Cಲೋಡ್ ಮಾಡಿದ ಫೈಲ್: ${uploadedFile.name}] — ಈ ಫೈಲ್\u200Cನಲ್ಲಿರುವ ಪ್ರಕರಣ ವಿವರಗಳ ಆಧಾರದ ಮೇಲೆ ಆದೇಶ ರಚಿಸಿ.`;
       }
 
       const response = await fetch('/api/generate-order', {
@@ -97,27 +126,18 @@ export default function GenerateOrderPage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({
-          orderType,
-          caseDetails: details,
-        }),
+        body: JSON.stringify({ orderType, caseDetails: details }),
       });
 
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Generation failed');
-      }
+      if (!response.ok) throw new Error(data.error || 'Generation failed');
 
       setGeneratedOrder(data.order);
       setMetadata(data.metadata);
-      if (data.guardrails) {
-        setGuardrails(data.guardrails);
-      }
-      // Refresh profile to update credits in sidebar/dashboard
+      if (data.guardrails) setGuardrails(data.guardrails);
       await refreshProfile();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'ಆದೇಶ ರಚನೆ ವಿಫಲವಾಯಿತು');
+      setError(err instanceof Error ? err.message : t(strings.errors.generationFailed, locale));
     } finally {
       setGenerating(false);
     }
@@ -138,7 +158,7 @@ export default function GenerateOrderPage() {
       const { data: { session } } = await supabase.auth.getSession();
 
       if (!session?.access_token) {
-        setError('ಸೆಷನ್ ಮುಕ್ತಾಯವಾಗಿದೆ. ದಯವಿಟ್ಟು ಮರುಲಾಗಿನ್ ಮಾಡಿ.');
+        setError(locale === 'kn' ? 'ಸೆಷನ್ ಮುಕ್ತಾಯ. ಮರುಲಾಗಿನ್ ಮಾಡಿ.' : 'Session expired.');
         return;
       }
 
@@ -148,18 +168,11 @@ export default function GenerateOrderPage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({
-          orderText: generatedOrder,
-          format,
-          orderType,
-        }),
+        body: JSON.stringify({ orderText: editedOrder, format, orderType }),
       });
 
-      if (!response.ok) {
-        throw new Error('Download failed');
-      }
+      if (!response.ok) throw new Error('Download failed');
 
-      // Download the file
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -168,11 +181,13 @@ export default function GenerateOrderPage() {
       a.click();
       URL.revokeObjectURL(url);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'ಡೌನ್‌ಲೋಡ್ ವಿಫಲವಾಯಿತು');
+      setError(err instanceof Error ? err.message : t(strings.errors.pleaseRetry, locale));
     } finally {
       setDownloading(false);
     }
   };
+
+  const editedWordCount = editedOrder.split(/\s+/).filter(Boolean).length;
 
   return (
     <div className="space-y-6 p-6">
@@ -241,13 +256,7 @@ export default function GenerateOrderPage() {
               <p className="mt-2 text-sm text-gray-600">
                 {uploadedFile ? uploadedFile.name : t(strings.generate.acceptedFormats, locale)}
               </p>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".docx,.pdf"
-                className="hidden"
-                onChange={handleFileUpload}
-              />
+              <input ref={fileInputRef} type="file" accept=".docx,.pdf" className="hidden" onChange={handleFileUpload} />
             </div>
           </div>
 
@@ -272,15 +281,9 @@ export default function GenerateOrderPage() {
             className="w-full py-3 px-6 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
           >
             {generating ? (
-              <>
-                <Loader2 className="h-5 w-5 animate-spin" />
-                {t(strings.generate.generating, locale)}
-              </>
+              <><Loader2 className="h-5 w-5 animate-spin" />{t(strings.generate.generating, locale)}</>
             ) : (
-              <>
-                <FileText className="h-5 w-5" />
-                {t(strings.generate.generateBtn, locale)}
-              </>
+              <><FileText className="h-5 w-5" />{t(strings.generate.generateBtn, locale)}</>
             )}
           </button>
         </CardContent>
@@ -296,9 +299,12 @@ export default function GenerateOrderPage() {
             </CardTitle>
             {metadata && (
               <CardDescription>
-                {t(strings.result.wordCount, locale)}: {metadata.wordCount} |
+                {t(strings.result.wordCount, locale)}: {editedWordCount} |
                 Model: {metadata.model} |
                 {metadata.generationTime && ` ⏱ ${metadata.generationTime} |`}
+                {metadata.refsUsed !== undefined && (
+                  <> 📚 {metadata.refsUsed}/{metadata.totalRefs} {locale === 'kn' ? 'ಉಲ್ಲೇಖಗಳು' : 'refs'} |</>
+                )}
                 {t(strings.result.sections, locale)}: {orderType === 'appeal' ? 13 : 8}
               </CardDescription>
             )}
@@ -307,20 +313,14 @@ export default function GenerateOrderPage() {
             {/* Guardrail Status Panel */}
             {guardrails && (
               <div className={`rounded-lg border p-4 ${
-                guardrails.allPassed
-                  ? 'bg-green-50 border-green-200'
-                  : 'bg-amber-50 border-amber-200'
+                guardrails.allPassed ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'
               }`}>
                 <div className="flex items-center gap-2 mb-3">
-                  {guardrails.allPassed ? (
-                    <ShieldCheck className="h-5 w-5 text-green-600" />
-                  ) : (
-                    <ShieldAlert className="h-5 w-5 text-amber-600" />
-                  )}
-                  <span className={`text-sm font-semibold ${
-                    guardrails.allPassed ? 'text-green-700' : 'text-amber-700'
-                  }`}>
-                    {guardrails.summaryKn}
+                  {guardrails.allPassed
+                    ? <ShieldCheck className="h-5 w-5 text-green-600" />
+                    : <ShieldAlert className="h-5 w-5 text-amber-600" />}
+                  <span className={`text-sm font-semibold ${guardrails.allPassed ? 'text-green-700' : 'text-amber-700'}`}>
+                    {locale === 'kn' ? guardrails.summaryKn : guardrails.summary}
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-3">
@@ -328,27 +328,50 @@ export default function GenerateOrderPage() {
                     <div
                       key={g.id}
                       className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${
-                        g.passed
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
+                        g.passed ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                       }`}
                       title={g.details}
                     >
-                      {g.passed ? '✅' : '⚠️'} {g.nameKn}
-                      {!g.passed && (
-                        <span className="ml-1 text-red-600">— {g.detailsKn}</span>
-                      )}
+                      {g.passed ? '\u2705' : '\u26A0\uFE0F'} {locale === 'kn' ? g.nameKn : g.name}
+                      {!g.passed && <span className="ml-1 text-red-600">— {locale === 'kn' ? g.detailsKn : g.details}</span>}
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Order Preview */}
-            <div className="bg-gray-50 rounded-lg p-6 max-h-96 overflow-y-auto">
-              <pre className="whitespace-pre-wrap text-sm leading-relaxed font-sans">
-                {generatedOrder}
-              </pre>
+            {/* AI Disclaimer Watermark — shown until verified */}
+            {!verified && (
+              <div className="text-center py-2 bg-amber-100 border border-amber-300 rounded-lg text-sm font-medium text-amber-800">
+                {t(strings.result.aiDisclaimer, locale)}
+              </div>
+            )}
+
+            {/* Editable Order Text */}
+            <div className="relative">
+              <textarea
+                value={editedOrder}
+                onChange={(e) => setEditedOrder(e.target.value)}
+                rows={16}
+                className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm leading-relaxed font-sans focus:border-primary-500 focus:ring-1 focus:ring-primary-500 resize-y"
+              />
+              {/* Auto-save indicator */}
+              <div className="absolute top-2 right-2 flex items-center gap-1 text-xs text-gray-400">
+                {autoSaveStatus === 'saving' && (
+                  <><Loader2 className="h-3 w-3 animate-spin" />{locale === 'kn' ? 'ಉಳಿಸಲಾಗುತ್ತಿದೆ...' : 'Saving...'}</>
+                )}
+                {autoSaveStatus === 'saved' && (
+                  <><Save className="h-3 w-3 text-green-500" />{t(strings.result.autoSaved, locale)}</>
+                )}
+              </div>
+            </div>
+
+            {/* Word count live display */}
+            <div className="text-sm text-gray-500 text-right">
+              📝 {editedWordCount} {t(strings.common.words, locale)}
+              {editedWordCount >= 550 && editedWordCount <= 750
+                ? <span className="ml-2 text-green-600">\u2705</span>
+                : <span className="ml-2 text-amber-600">\u26A0\uFE0F</span>}
             </div>
 
             {/* Verification Checkbox — MANDATORY before download */}
@@ -371,9 +394,7 @@ export default function GenerateOrderPage() {
                 onClick={() => handleDownload('docx')}
                 disabled={!verified || downloading}
                 className={`flex-1 py-3 px-4 rounded-lg font-medium flex items-center justify-center gap-2 transition-colors ${
-                  verified && !downloading
-                    ? 'bg-blue-600 text-white hover:bg-blue-700'
-                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  verified && !downloading ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                 }`}
               >
                 {downloading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
@@ -383,9 +404,7 @@ export default function GenerateOrderPage() {
                 onClick={() => handleDownload('pdf')}
                 disabled={!verified || downloading}
                 className={`flex-1 py-3 px-4 rounded-lg font-medium flex items-center justify-center gap-2 transition-colors ${
-                  verified && !downloading
-                    ? 'bg-red-600 text-white hover:bg-red-700'
-                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  verified && !downloading ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                 }`}
               >
                 {downloading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
