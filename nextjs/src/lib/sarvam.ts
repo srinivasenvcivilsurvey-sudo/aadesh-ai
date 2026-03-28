@@ -50,10 +50,11 @@ export async function generateOrder(
 
   const data = await response.json();
   const content = data.choices?.[0]?.message?.content || '';
-  const wordCount = content.split(/\s+/).filter(Boolean).length;
+    const cleanContent = content.replace(/[\s\S]*?<\/think>/g, '').trim();
+  const wordCount = cleanContent.split(/\s+/).filter(Boolean).length;
 
   return {
-    content,
+    cleanContent,
     wordCount,
     model: data.model || 'sarvam-m',
     tokensUsed: data.usage?.total_tokens || 0,
