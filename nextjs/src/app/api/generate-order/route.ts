@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateOrder, DEFAULT_SYSTEM_PROMPT } from '@/lib/sarvam';
+import { generateOrder, DEFAULT_SYSTEM_PROMPT, normalizeNFKC } from '@/lib/sarvam';
+import { runGuardrails } from '@/lib/guardrails';
 import { createClient } from '@supabase/supabase-js';
 
 export async function POST(request: NextRequest) {
@@ -49,15 +50,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // NFKC-normalize user input before processing
+    const normalizedCaseDetails = normalizeNFKC(caseDetails);
+
     // Generate the order using Sarvam 105B
+    const startTime = Date.now();
     const result = await generateOrder(
       {
         orderType,
-        caseDetails,
+        caseDetails: normalizedCaseDetails,
         systemPrompt: systemPrompt || DEFAULT_SYSTEM_PROMPT,
       },
       sarvamKey
     );
+    const generationTime = ((Date.now() - startTime) / 1000).toFixed(1);
+
+    // Run 3 MVP guardrails on the generated output (all ₹0 — pure regex)
+    const guardrails = runGuardrails(result.content, orderType, normalizedCaseDetails);
 
     // TODO: Deduct credits from user's balance in Supabase
     // TODO: Save generated order to orders table
@@ -70,7 +79,14 @@ export async function POST(request: NextRequest) {
         model: result.model,
         tokensUsed: result.tokensUsed,
         orderType,
+        generationTime: `${generationTime}s`,
         generatedAt: new Date().toISOString(),
+      },
+      guardrails: {
+        results: guardrails.results,
+        allPassed: guardrails.allPassed,
+        summary: guardrails.summary,
+        summaryKn: guardrails.summaryKn,
       },
     });
   } catch (error: unknown) {

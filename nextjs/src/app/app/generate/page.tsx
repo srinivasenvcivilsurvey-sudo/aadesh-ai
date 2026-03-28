@@ -3,9 +3,32 @@ import React, { useState, useRef } from 'react';
 import { useGlobal } from '@/lib/context/GlobalContext';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { FileText, Upload, Loader2, Download, RefreshCw, AlertCircle, CheckCircle } from 'lucide-react';
+import { FileText, Upload, Loader2, Download, RefreshCw, AlertCircle, CheckCircle, ShieldCheck, ShieldAlert } from 'lucide-react';
 import strings, { t } from '@/lib/i18n';
 import { createSPASassClientAuthenticated } from '@/lib/supabase/client';
+
+interface GuardrailResult {
+  id: string;
+  name: string;
+  nameKn: string;
+  passed: boolean;
+  details: string;
+  detailsKn: string;
+}
+
+interface GuardrailReport {
+  results: GuardrailResult[];
+  allPassed: boolean;
+  summary: string;
+  summaryKn: string;
+}
+
+interface OrderMetadata {
+  wordCount: number;
+  model: string;
+  tokensUsed: number;
+  generationTime?: string;
+}
 
 export default function GenerateOrderPage() {
   useGlobal(); // ensure user is loaded
@@ -14,7 +37,8 @@ export default function GenerateOrderPage() {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [generating, setGenerating] = useState(false);
   const [generatedOrder, setGeneratedOrder] = useState('');
-  const [metadata, setMetadata] = useState<{ wordCount: number; model: string; tokensUsed: number } | null>(null);
+  const [metadata, setMetadata] = useState<OrderMetadata | null>(null);
+  const [guardrails, setGuardrails] = useState<GuardrailReport | null>(null);
   const [verified, setVerified] = useState(false);
   const [error, setError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -45,6 +69,7 @@ export default function GenerateOrderPage() {
     setError('');
     setGeneratedOrder('');
     setMetadata(null);
+    setGuardrails(null);
     setVerified(false);
 
     try {
@@ -84,6 +109,9 @@ export default function GenerateOrderPage() {
 
       setGeneratedOrder(data.order);
       setMetadata(data.metadata);
+      if (data.guardrails) {
+        setGuardrails(data.guardrails);
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'ಆದೇಶ ರಚನೆ ವಿಫಲವಾಯಿತು');
     } finally {
@@ -231,11 +259,52 @@ export default function GenerateOrderPage() {
               <CardDescription>
                 {t(strings.result.wordCount, locale)}: {metadata.wordCount} |
                 Model: {metadata.model} |
+                {metadata.generationTime && ` ⏱ ${metadata.generationTime} |`}
                 {t(strings.result.sections, locale)}: {orderType === 'appeal' ? 13 : 8}
               </CardDescription>
             )}
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Guardrail Status Panel */}
+            {guardrails && (
+              <div className={`rounded-lg border p-4 ${
+                guardrails.allPassed
+                  ? 'bg-green-50 border-green-200'
+                  : 'bg-amber-50 border-amber-200'
+              }`}>
+                <div className="flex items-center gap-2 mb-3">
+                  {guardrails.allPassed ? (
+                    <ShieldCheck className="h-5 w-5 text-green-600" />
+                  ) : (
+                    <ShieldAlert className="h-5 w-5 text-amber-600" />
+                  )}
+                  <span className={`text-sm font-semibold ${
+                    guardrails.allPassed ? 'text-green-700' : 'text-amber-700'
+                  }`}>
+                    {guardrails.summaryKn}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  {guardrails.results.map((g) => (
+                    <div
+                      key={g.id}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${
+                        g.passed
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-red-100 text-red-800'
+                      }`}
+                      title={g.details}
+                    >
+                      {g.passed ? '✅' : '⚠️'} {g.nameKn}
+                      {!g.passed && (
+                        <span className="ml-1 text-red-600">— {g.detailsKn}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Order Preview */}
             <div className="bg-gray-50 rounded-lg p-6 max-h-96 overflow-y-auto">
               <pre className="whitespace-pre-wrap text-sm leading-relaxed font-sans">

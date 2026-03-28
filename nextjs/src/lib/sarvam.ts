@@ -16,10 +16,25 @@ export interface OrderGenerationResponse {
   tokensUsed: number;
 }
 
+/**
+ * NFKC-normalize any string. Mandatory for all Kannada text processing.
+ * Prevents silent failures where visually identical characters have different
+ * Unicode representations (NFC vs NFD).
+ * Blueprint v6.7: "Apply NFKC to ALL inputs: database entries, LLM outputs,
+ * user queries, OCR results. Do this BEFORE any guardrail check."
+ */
+export function normalizeNFKC(text: string): string {
+  return text.normalize('NFKC');
+}
+
 export async function generateOrder(
   request: OrderGenerationRequest,
   apiKey: string
 ): Promise<OrderGenerationResponse> {
+  // NFKC-normalize all text inputs before sending to Sarvam API
+  const normalizedPrompt = normalizeNFKC(request.systemPrompt);
+  const normalizedDetails = normalizeNFKC(request.caseDetails);
+
   const response = await fetch(SARVAM_API_URL, {
     method: 'POST',
     headers: {
@@ -31,11 +46,11 @@ export async function generateOrder(
       messages: [
         {
           role: 'system',
-          content: request.systemPrompt,
+          content: normalizedPrompt,
         },
         {
           role: 'user',
-          content: request.caseDetails,
+          content: normalizedDetails,
         },
       ],
       max_tokens: 4096,
@@ -49,9 +64,11 @@ export async function generateOrder(
   }
 
   const data = await response.json();
-  // FIX: 2026-03-28 — Sarvam returns <think>...</think> reasoning tags before order text. Strip them.
+  // FIX: 2026-03-28 — Strip <think>...</think> reasoning tags from Sarvam output
   const rawContent = data.choices?.[0]?.message?.content || '';
-  const content = rawContent.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+  const stripped = rawContent.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+  // NFKC-normalize the AI output before any downstream processing
+  const content = normalizeNFKC(stripped);
   const wordCount = content.split(/\s+/).filter(Boolean).length;
 
   return {
