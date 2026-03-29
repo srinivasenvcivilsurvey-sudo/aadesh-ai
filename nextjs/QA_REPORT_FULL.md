@@ -284,7 +284,7 @@ Cannot test live (requires login). Source code review confirms:
 3. **Supabase connection pooling** — Multiple auth calls per page load
 
 ### ONE THING THAT COULD EMBARRASS US IN FRONT OF BANU
-**The pricing section showing Kannada when page is in English mode.** This is the FIRST thing a bilingual user would notice — it makes the app look half-built. **This is now FIXED but needs deployment.**
+**The pricing section showing Kannada when page is in English mode.** This is the FIRST thing a bilingual user would notice — it makes the app look half-built. **FIXED AND DEPLOYED — verified live on 2026-03-30.**
 
 ---
 
@@ -304,6 +304,17 @@ Cannot test live (requires login). Source code review confirms:
 ## SECTION 9: Deployment Status
 
 - **Build:** ✅ Successful (npm run build — no errors)
-- **Git:** Pending commit + push
-- **Server deploy:** Needs manual SSH to 165.232.176.181 (no CI/CD pipeline)
-- **Action needed:** Srinivas to SSH and run `git pull && docker compose up -d --build`
+- **Git:** ✅ Committed and pushed to GitHub (commit f4525a1)
+- **Server deploy:** ✅ Deployed via `deploy_vps.py` (paramiko SSH + SFTP)
+- **Health check:** ✅ HTTP 200 on port 3000 (PM2) and port 80 (Nginx)
+- **Live verification (2026-03-30):**
+  - ✅ Landing page EN toggle → Pricing section now fully English
+  - ✅ Google button: "Continue with Google" — single line, centered
+  - ✅ Forgot-password: bilingual text (Kannada + English)
+  - ✅ Zero console errors on all public pages
+
+## SECTION 10: Screens 7-12 Status
+
+Screens 7-12 (Dashboard, Generate, Train, My Orders, Credits, Settings) require **authenticated login**. Playwright browser has no Google OAuth session. Source code review confirms all pages use `useLanguage()` and `locale` properly.
+
+**To complete screens 7-12 QA:** Srinivas needs to log in via Google on the live site, then share the session or say "continue" in a new session with browser cookies.
