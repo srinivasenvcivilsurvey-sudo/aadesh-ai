@@ -123,6 +123,21 @@ export async function POST(request: NextRequest) {
     );
     const generationTime = ((Date.now() - startTime) / 1000).toFixed(1);
 
+    // ── PLACEHOLDER CHECK ────────────────────────────────
+    // Reject output if AI returned unfilled template brackets like [NAME], [DATE]
+    const unfilledPlaceholders = result.content.match(/\[[A-Z][A-Z_]{2,}\]/g);
+    if (unfilledPlaceholders) {
+      console.error('Unfilled placeholders detected:', unfilledPlaceholders);
+      return NextResponse.json(
+        {
+          error: 'ಆದೇಶ ಸಂಪೂರ್ಣವಾಗಿ ರಚಿಸಲಾಗಲಿಲ್ಲ. ಹೆಚ್ಚಿನ ಮಾಹಿತಿ ನೀಡಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.',
+          errorCode: 'INCOMPLETE_ORDER',
+          placeholders: unfilledPlaceholders,
+        },
+        { status: 422 }
+      );
+    }
+
     // ── RUN GUARDRAILS ───────────────────────────────────
     const guardrails = runGuardrails(result.content, orderType, normalizedCaseDetails);
 
