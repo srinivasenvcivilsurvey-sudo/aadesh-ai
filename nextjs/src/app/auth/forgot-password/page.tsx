@@ -45,17 +45,17 @@ export default function ForgotPasswordPage() {
                     </div>
 
                     <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                        Check your email
+                        ನಿಮ್ಮ ಇಮೇಲ್ ಪರಿಶೀಲಿಸಿ / Check your email
                     </h2>
 
                     <p className="text-gray-600 mb-8">
-                        We have sent a password reset link to your email address.
-                        Please check your inbox and follow the instructions to reset your password.
+                        ಪಾಸ್{'\u200C'}ವರ್ಡ್ ಮರುಹೊಂದಿಸುವ ಲಿಂಕ್ ನಿಮ್ಮ ಇಮೇಲ್{'\u200C'}ಗೆ ಕಳುಹಿಸಲಾಗಿದೆ.
+                        ದಯವಿಟ್ಟು ಇಮೇಲ್ ತೆರೆದು ಲಿಂಕ್ ಕ್ಲಿಕ್ ಮಾಡಿ.
                     </p>
 
                     <div className="mt-6 text-center text-sm">
                         <Link href="/auth/login" className="font-medium text-primary-600 hover:text-primary-500">
-                            Return to login
+                            ← ಲಾಗಿನ್ ಪುಟಕ್ಕೆ / Return to login
                         </Link>
                     </div>
                 </div>
@@ -67,7 +67,7 @@ export default function ForgotPasswordPage() {
         <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
             <div className="sm:mx-auto sm:w-full sm:max-w-md">
                 <h2 className="text-2xl font-bold text-center text-gray-900 mb-8">
-                    Reset your password
+                    ಪಾಸ್{'\u200C'}ವರ್ಡ್ ಮರುಹೊಂದಿಸಿ / Reset your password
                 </h2>
             </div>
 
@@ -80,7 +80,7 @@ export default function ForgotPasswordPage() {
             <form onSubmit={handleSubmit} className="space-y-6">
                 <div>
                     <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                        Email address
+                        ಇಮೇಲ್ / Email address
                     </label>
                     <div className="mt-1">
                         <input
@@ -91,11 +91,11 @@ export default function ForgotPasswordPage() {
                             required
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            className="block w-full appearance-none rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-primary-500"
+                            className="block w-full appearance-none rounded-md border border-gray-300 px-3 py-3 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-primary-500"
                         />
                     </div>
                     <p className="mt-2 text-sm text-gray-500">
-                        Enter your email address and we will send you a link to reset your password.
+                        ನಿಮ್ಮ ಇಮೇಲ್ ನಮೂದಿಸಿ, ಮರುಹೊಂದಿಸುವ ಲಿಂಕ್ ಕಳುಹಿಸುತ್ತೇವೆ.
                     </p>
                 </div>
 
@@ -103,18 +103,18 @@ export default function ForgotPasswordPage() {
                     <button
                         type="submit"
                         disabled={loading}
-                        className="flex w-full justify-center rounded-md border border-transparent bg-primary-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50"
+                        className="flex w-full justify-center rounded-md border border-transparent bg-primary-600 py-3 px-4 text-base font-medium text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50"
                     >
-                        {loading ? 'Sending reset link...' : 'Send reset link'}
+                        {loading ? 'ಕಳುಹಿಸಲಾಗುತ್ತಿದೆ...' : 'ಮರುಹೊಂದಿಸುವ ಲಿಂಕ್ ಕಳುಹಿಸಿ / Send reset link'}
                     </button>
                 </div>
             </form>
 
             <div className="mt-6 text-center text-sm">
-                <span className="text-gray-600">Remember your password?</span>
+                <span className="text-gray-600">ಪಾಸ್{'\u200C'}ವರ್ಡ್ ನೆನಪಿದೆಯೇ?</span>
                 {' '}
                 <Link href="/auth/login" className="font-medium text-primary-600 hover:text-primary-500">
-                    Sign in
+                    ಲಾಗಿನ್ / Sign in
                 </Link>
             </div>
         </div>

@@ -111,16 +111,14 @@ export default function SSOButtons({ onError }: SSOButtonsProps) {
                         <button
                             key={provider}
                             onClick={() => handleSSOLogin(provider)}
-                            className={`group relative flex h-11 items-center rounded-md border ${config.borderColor} px-6 transition-colors duration-200 ${config.bgColor} ${config.textColor}`}
+                            className={`group flex h-12 w-full items-center justify-center gap-3 rounded-md border ${config.borderColor} px-6 transition-colors duration-200 ${config.bgColor} ${config.textColor}`}
                         >
-                            <div className="absolute left-6">
-                                <div className="flex h-5 w-5 items-center justify-center">
-                                    {config.icon}
-                                </div>
+                            <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center">
+                                {config.icon}
                             </div>
-                            <span className="mx-auto text-sm font-semibold">
-                {config.name} ನೊಂದಿಗೆ ಮುಂದುವರಿಸಿ / Continue with {config.name}
-              </span>
+                            <span className="text-sm font-semibold whitespace-nowrap">
+                                Continue with {config.name}
+                            </span>
                         </button>
                     );
                 })}

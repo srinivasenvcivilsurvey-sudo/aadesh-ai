@@ -5,7 +5,9 @@ export interface PricingTier {
     orders: number;
     perOrder: string;
     description: string;
+    descriptionEn: string;
     features: string[];
+    featuresEn: string[];
     popular?: boolean;
 }
 
@@ -18,10 +20,16 @@ class PricingService {
             orders: 30,
             perOrder: '₹16.6',
             description: 'ಸಣ್ಣ ಕಚೇರಿಗಳಿಗೆ',
+            descriptionEn: 'For small offices',
             features: [
                 '30 AI ಆದೇಶ ಕರಡುಗಳು',
                 'DOCX & PDF ಡೌನ್‌ಲೋಡ್',
                 'ಸರಕಾರಿ ಕನ್ನಡ',
+            ],
+            featuresEn: [
+                '30 AI order drafts',
+                'DOCX & PDF download',
+                'Sarakari Kannada',
             ],
         },
         {
@@ -31,11 +39,18 @@ class PricingService {
             orders: 75,
             perOrder: '₹13.3',
             description: 'ಮಧ್ಯಮ ಕಚೇರಿಗಳಿಗೆ',
+            descriptionEn: 'For medium offices',
             features: [
                 '75 AI ಆದೇಶ ಕರಡುಗಳು',
                 'DOCX & PDF ಡೌನ್‌ಲೋಡ್',
                 'ಸರಕಾರಿ ಕನ್ನಡ',
                 'ಆದ್ಯತೆ ಬೆಂಬಲ',
+            ],
+            featuresEn: [
+                '75 AI order drafts',
+                'DOCX & PDF download',
+                'Sarakari Kannada',
+                'Priority support',
             ],
         },
         {
@@ -45,12 +60,20 @@ class PricingService {
             orders: 200,
             perOrder: '₹10.0',
             description: 'ದೊಡ್ಡ ಕಚೇರಿಗಳಿಗೆ',
+            descriptionEn: 'For large offices',
             features: [
                 '200 AI ಆದೇಶ ಕರಡುಗಳು',
                 'DOCX & PDF ಡೌನ್‌ಲೋಡ್',
                 'ಸರಕಾರಿ ಕನ್ನಡ',
                 'ಆದ್ಯತೆ ಬೆಂಬಲ',
                 'ಬಹು-ಮಾಡೆಲ್ ಆಯ್ಕೆ',
+            ],
+            featuresEn: [
+                '200 AI order drafts',
+                'DOCX & PDF download',
+                'Sarakari Kannada',
+                'Priority support',
+                'Multi-model selection',
             ],
             popular: true,
         },
@@ -61,6 +84,7 @@ class PricingService {
             orders: 600,
             perOrder: '₹8.3',
             description: 'ವಾರ್ಷಿಕ — ಅತ್ಯುತ್ತಮ ಮೌಲ್ಯ',
+            descriptionEn: 'Annual — Best Value',
             features: [
                 '600 AI ಆದೇಶ ಕರಡುಗಳು',
                 'DOCX & PDF ಡೌನ್‌ಲೋಡ್',
@@ -69,6 +93,14 @@ class PricingService {
                 'ಬಹು-ಮಾಡೆಲ್ ಆಯ್ಕೆ',
                 'ವೈಯಕ್ತಿಕ ಶೈಲಿ ಕಲಿಕೆ',
             ],
+            featuresEn: [
+                '600 AI order drafts',
+                'DOCX & PDF download',
+                'Sarakari Kannada',
+                'Priority support',
+                'Multi-model selection',
+                'Personal style learning',
+            ],
         },
     ];
 
@@ -76,7 +108,15 @@ class PricingService {
         return this.tiers;
     }
 
-    static getCommonFeatures(): string[] {
+    static getCommonFeatures(locale: 'kn' | 'en' = 'kn'): string[] {
+        if (locale === 'en') {
+            return [
+                'Secure login',
+                'Encrypted storage',
+                '7 accuracy guardrails',
+                '13-section order structure',
+            ];
+        }
         return [
             'ಸುರಕ್ಷಿತ ಲಾಗಿನ್',
             'ಎನ್‌ಕ್ರಿಪ್ಟೆಡ್ ಸಂಗ್ರಹ',

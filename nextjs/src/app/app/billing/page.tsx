@@ -140,10 +140,10 @@ export default function BillingPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <CreditCard className="h-6 w-6 text-primary-600" />
-            {t(strings.nav.billing, locale)} — ರೀಚಾರ್ಜ್ ಪ್ಯಾಕ್‌ಗಳು
+            {t(strings.nav.billing, locale)} — {locale === 'kn' ? 'ರೀಚಾರ್ಜ್ ಪ್ಯಾಕ್\u200Cಗಳು' : 'Recharge Packs'}
           </CardTitle>
           <CardDescription>
-            ಆದೇಶ ಕ್ರೆಡಿಟ್‌ಗಳನ್ನು ಖರೀದಿಸಿ. ಪ್ರತಿ ಕ್ರೆಡಿಟ್ = ಒಂದು AI ಆದೇಶ ಕರಡು.
+            {locale === 'kn' ? 'ಆದೇಶ ಕ್ರೆಡಿಟ್\u200Cಗಳನ್ನು ಖರೀದಿಸಿ. ಪ್ರತಿ ಕ್ರೆಡಿಟ್ = ಒಂದು AI ಆದೇಶ ಕರಡು.' : 'Buy order credits. Each credit = one AI order draft.'}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -190,15 +190,15 @@ export default function BillingPage() {
                 <ul className="mt-4 space-y-1 text-left text-sm">
                   <li className="flex items-center gap-2">
                     <Check className="h-4 w-4 text-green-500" />
-                    AI ಆದೇಶ ಕರಡು
+                    {locale === 'kn' ? 'AI ಆದೇಶ ಕರಡು' : 'AI order drafts'}
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="h-4 w-4 text-green-500" />
-                    DOCX & PDF ಡೌನ್‌ಲೋಡ್
+                    {locale === 'kn' ? 'DOCX & PDF ಡೌನ್\u200Cಲೋಡ್' : 'DOCX & PDF download'}
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="h-4 w-4 text-green-500" />
-                    ಸರಕಾರಿ ಕನ್ನಡ
+                    {locale === 'kn' ? 'ಸರಕಾರಿ ಕನ್ನಡ' : 'Sarakari Kannada'}
                   </li>
                 </ul>
 
@@ -211,7 +211,7 @@ export default function BillingPage() {
                       : 'bg-gray-900 text-white hover:bg-gray-800'
                   } disabled:opacity-50`}
                 >
-                  {loading === pack.id ? 'ಲೋಡ್ ಆಗುತ್ತಿದೆ...' : t(strings.pricing.buyNow, locale)}
+                  {loading === pack.id ? (locale === 'kn' ? 'ಲೋಡ್ ಆಗುತ್ತಿದೆ...' : 'Loading...') : t(strings.pricing.buyNow, locale)}
                 </button>
               </div>
             ))}

@@ -124,7 +124,7 @@ export default function LandingPage() {
               <AuthAwareButtons variant="nav" />
             </div>
 
-            {/* Mobile language toggle */}
+            {/* Mobile nav buttons */}
             <div className="md:hidden flex items-center gap-2">
               <button
                 onClick={toggleLocale}
@@ -132,6 +132,15 @@ export default function LandingPage() {
               >
                 {locale === 'kn' ? 'EN' : 'ಕನ್ನಡ'}
               </button>
+              <Link href="/auth/login" className="text-xs text-gray-600 hover:text-gray-900 font-medium">
+                {locale === 'kn' ? 'ಲಾಗಿನ್' : 'Login'}
+              </Link>
+              <Link
+                href="/auth/register"
+                className="bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-green-700"
+              >
+                {locale === 'kn' ? 'ಸೈನ್ ಅಪ್' : 'Sign Up'}
+              </Link>
             </div>
           </div>
         </div>
