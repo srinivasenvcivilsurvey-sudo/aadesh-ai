@@ -186,9 +186,39 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     </div>
                 </div>
 
-                <main className="p-4">
+                <main className="p-4 pb-24 lg:pb-4">
                     {children}
                 </main>
+            </div>
+
+            {/* Mobile Bottom Navigation — always visible on phones */}
+            <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40 lg:hidden">
+                <div className="flex justify-around items-center h-16">
+                    {[
+                        { href: '/app', icon: Home, label: locale === 'kn' ? 'ಮುಖಪುಟ' : 'Home' },
+                        { href: '/app/generate', icon: FileText, label: locale === 'kn' ? 'ರಚಿಸಿ' : 'Generate' },
+                        { href: '/app/my-orders', icon: Files, label: locale === 'kn' ? 'ಆದೇಶಗಳು' : 'Orders' },
+                        { href: '/app/billing', icon: CreditCard, label: locale === 'kn' ? 'ಕ್ರೆಡಿಟ್' : 'Credits' },
+                    ].map((item) => {
+                        const isActive = pathname === item.href;
+                        return (
+                            <Link
+                                key={item.href}
+                                href={item.href}
+                                className={`flex flex-col items-center justify-center gap-0.5 px-3 py-1 rounded-lg transition-colors ${
+                                    isActive
+                                        ? 'text-primary-600'
+                                        : 'text-gray-400 hover:text-gray-600'
+                                }`}
+                            >
+                                <item.icon className={`h-5 w-5 ${isActive ? 'text-primary-600' : ''}`} />
+                                <span className={`text-[10px] font-medium ${isActive ? 'text-primary-600' : ''}`}>
+                                    {item.label}
+                                </span>
+                            </Link>
+                        );
+                    })}
+                </div>
             </div>
         </div>
     );

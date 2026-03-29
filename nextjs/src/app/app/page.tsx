@@ -58,11 +58,18 @@ export default function DashboardContent() {
 
     return (
         <div className="space-y-6 p-6">
-            {/* Welcome Card */}
+            {/* Personalized Time-Based Greeting */}
             <Card>
                 <CardHeader>
-                    <CardTitle>
-                        {t(strings.dashboard.welcome, locale)}, {user?.email?.split('@')[0]}!
+                    <CardTitle className="text-xl">
+                        {(() => {
+                            const hour = new Date().getHours();
+                            const greeting = locale === 'kn'
+                                ? (hour < 12 ? 'ಶುಭೋದಯ' : hour < 16 ? 'ಶುಭ ಮಧ್ಯಾಹ್ನ' : 'ಶುಭ ಸಂಜೆ')
+                                : (hour < 12 ? 'Good morning' : hour < 16 ? 'Good afternoon' : 'Good evening');
+                            const name = user?.email?.split('@')[0] || '';
+                            return `${greeting}, ${name} `;
+                        })()}
                     </CardTitle>
                     <CardDescription className="flex items-center gap-2">
                         <CalendarDays className="h-4 w-4" />

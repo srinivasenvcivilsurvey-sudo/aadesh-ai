@@ -261,101 +261,113 @@ export default function MyOrdersPage() {
         </Card>
       )}
 
-      {/* Orders Table */}
-      <Card>
-        <CardContent className="pt-6">
+      {/* Sort Controls */}
+      <div className="flex gap-2 text-sm">
+        <button
+          onClick={() => toggleSort('created_at')}
+          className={`px-3 py-1.5 rounded-full border transition-colors ${sortBy === 'created_at' ? 'bg-primary-50 border-primary-300 text-primary-700' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+        >
+          <span className="flex items-center gap-1">
+            {locale === 'kn' ? 'ದಿನಾಂಕ' : 'Date'} <ArrowUpDown className="h-3 w-3" />
+          </span>
+        </button>
+        <button
+          onClick={() => toggleSort('score')}
+          className={`px-3 py-1.5 rounded-full border transition-colors ${sortBy === 'score' ? 'bg-primary-50 border-primary-300 text-primary-700' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+        >
+          <span className="flex items-center gap-1">
+            {locale === 'kn' ? 'ಸ್ಕೋರ್' : 'Score'} <ArrowUpDown className="h-3 w-3" />
+          </span>
+        </button>
+      </div>
+
+      {/* Orders — Card Layout */}
+      <div>
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-6 w-6 animate-spin text-primary-600" />
             </div>
           ) : orders.length === 0 ? (
-            <div className="text-center py-12">
-              <FileText className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-500 font-medium">
-                {locale === 'kn' ? 'ಯಾವುದೇ ಆದೇಶಗಳಿಲ್ಲ' : 'No orders yet'}
+            <div className="text-center py-16">
+              <FileText className="h-14 w-14 text-gray-300 mx-auto mb-4" />
+              <p className="text-gray-500 font-medium text-lg">
+                {locale === 'kn' ? 'ಇನ್ನೂ ಯಾವುದೇ ಆದೇಶಗಳಿಲ್ಲ' : 'No orders yet'}
               </p>
+              <p className="text-gray-400 text-sm mt-1 mb-4">
+                {locale === 'kn' ? 'ನಿಮ್ಮ ಮೊದಲ ಆದೇಶವನ್ನು ರಚಿಸಿ!' : 'Generate your first order!'}
+              </p>
+              <a
+                href="/app/generate"
+                className="inline-flex items-center gap-2 px-5 py-3 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700"
+              >
+                <FileText className="h-4 w-4" />
+                {locale === 'kn' ? 'ಮೊದಲ ಆದೇಶ ರಚಿಸಿ' : 'Generate First Order'}
+              </a>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-gray-500">
-                    <th className="py-2 pr-4">#</th>
-                    <th className="py-2 pr-4 cursor-pointer" onClick={() => toggleSort('created_at')}>
-                      <span className="flex items-center gap-1">
-                        {locale === 'kn' ? 'ದಿನಾಂಕ' : 'Date'}
-                        <ArrowUpDown className="h-3 w-3" />
+            <div className="space-y-3">
+              {orders.map((order) => (
+                <div
+                  key={order.id}
+                  className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow cursor-pointer"
+                  onClick={() => handleView(order.id)}
+                >
+                  {/* Card Header */}
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-primary-50 text-primary-700">
+                        {typeLabels[order.caseType]?.[locale] || order.caseType}
                       </span>
-                    </th>
-                    <th className="py-2 pr-4">{locale === 'kn' ? 'ಪ್ರಕಾರ' : 'Type'}</th>
-                    <th className="py-2 pr-4">{locale === 'kn' ? 'ಪ್ರಕರಣ ಸಂ.' : 'Case No.'}</th>
-                    <th className="py-2 pr-4 cursor-pointer" onClick={() => toggleSort('score')}>
-                      <span className="flex items-center gap-1">
-                        {locale === 'kn' ? 'ಪದಗಳು' : 'Words'}
-                        <ArrowUpDown className="h-3 w-3" />
-                      </span>
-                    </th>
-                    <th className="py-2 pr-4">{locale === 'kn' ? 'ಸ್ಕೋರ್' : 'Score'}</th>
-                    <th className="py-2 text-right">{locale === 'kn' ? 'ಕ್ರಿಯೆಗಳು' : 'Actions'}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {orders.map((order, index) => (
-                    <tr key={order.id} className="border-b last:border-0 hover:bg-gray-50">
-                      <td className="py-3 pr-4 text-gray-400">{(page - 1) * limit + index + 1}</td>
-                      <td className="py-3 pr-4 text-gray-600">
-                        {new Date(order.createdAt).toLocaleDateString(locale === 'kn' ? 'kn-IN' : 'en-IN', {
-                          month: 'short', day: 'numeric',
-                        })}
-                      </td>
-                      <td className="py-3 pr-4">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
-                          {typeLabels[order.caseType]?.[locale] || order.caseType}
+                      {order.caseNumber && (
+                        <span className="ml-2 text-sm text-gray-500 font-mono">
+                          {locale === 'kn' ? 'ಪ್ರಕರಣ' : 'Case'} {order.caseNumber}
                         </span>
-                      </td>
-                      <td className="py-3 pr-4 font-mono text-xs">
-                        {order.caseNumber || '—'}
-                      </td>
-                      <td className="py-3 pr-4">
-                        <span className={order.wordCount >= 550 && order.wordCount <= 750 ? 'text-green-600' : 'text-amber-600'}>
-                          {order.wordCount}
-                        </span>
-                      </td>
-                      <td className="py-3 pr-4">
-                        <span className={`font-medium ${order.score >= 85 ? 'text-green-600' : 'text-amber-600'}`}>
-                          {order.score}
-                        </span>
-                      </td>
-                      <td className="py-3 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => handleView(order.id)}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-full"
-                            title={locale === 'kn' ? 'ನೋಡಿ' : 'View'}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDownload(order.id, 'docx')}
-                            disabled={downloading}
-                            className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-full"
-                            title="DOCX"
-                          >
-                            <Download className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => window.location.href = '/app/generate'}
-                            className="p-1.5 text-orange-600 hover:bg-orange-50 rounded-full"
-                            title={locale === 'kn' ? 'ಮರುರಚಿಸಿ' : 'Regenerate'}
-                          >
-                            <RefreshCw className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      )}
+                    </div>
+                    <span className={`text-lg font-bold ${order.score >= 85 ? 'text-green-600' : 'text-amber-600'}`}>
+                      {order.score}
+                    </span>
+                  </div>
+
+                  {/* Card Meta */}
+                  <div className="flex items-center gap-4 text-sm text-gray-500 mb-3">
+                    <span>
+                      {new Date(order.createdAt).toLocaleDateString(locale === 'kn' ? 'kn-IN' : 'en-IN', {
+                        month: 'short', day: 'numeric', year: 'numeric',
+                      })}
+                    </span>
+                    <span className={order.wordCount >= 550 && order.wordCount <= 750 ? 'text-green-600' : 'text-amber-600'}>
+                      {order.wordCount} {locale === 'kn' ? 'ಪದ' : 'words'}
+                    </span>
+                  </div>
+
+                  {/* Card Actions */}
+                  <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleView(order.id); }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                    >
+                      <Eye className="h-4 w-4" />
+                      {locale === 'kn' ? 'ನೋಡಿ' : 'View'}
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDownload(order.id, 'docx'); }}
+                      disabled={downloading}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                      <Download className="h-4 w-4" />
+                      {locale === 'kn' ? 'ಡೌನ್\u200Cಲೋಡ್' : 'Download'}
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); window.location.href = '/app/generate'; }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-orange-600 hover:bg-orange-50 rounded-lg transition-colors ml-auto"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                      {locale === 'kn' ? 'ಮರುರಚಿಸಿ' : 'Regenerate'}
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 
@@ -385,8 +397,7 @@ export default function MyOrdersPage() {
               </div>
             </div>
           )}
-        </CardContent>
-      </Card>
+      </div>
     </div>
   );
 }

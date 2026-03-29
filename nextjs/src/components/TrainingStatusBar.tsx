@@ -47,6 +47,9 @@ export default function TrainingStatusBar({ fileCount, typeBreakdown = {} }: Tra
       textColor: 'text-red-700',
       icon: '\uD83D\uDD34',
       label: t(strings.training.needMoreMin, locale),
+      encourage: locale === 'kn'
+        ? 'ಪ್ರಾರಂಭವಾಗಿದೆ! ಇನ್ನು ಕೆಲವು ಫೈಲ್\u200Cಗಳು ಬೇಕು'
+        : 'Started! Need a few more files',
     },
     basic: {
       color: 'bg-yellow-500',
@@ -55,6 +58,9 @@ export default function TrainingStatusBar({ fileCount, typeBreakdown = {} }: Tra
       textColor: 'text-yellow-700',
       icon: '\uD83D\uDFE1',
       label: t(strings.training.basicTraining, locale),
+      encourage: locale === 'kn'
+        ? 'ಒಳ್ಳೆಯದು! AI ಕಲಿಯುತ್ತಿದೆ'
+        : 'Good! AI is learning',
     },
     good: {
       color: 'bg-green-500',
@@ -63,6 +69,9 @@ export default function TrainingStatusBar({ fileCount, typeBreakdown = {} }: Tra
       textColor: 'text-green-700',
       icon: '\uD83D\uDFE2',
       label: t(strings.training.goodTraining, locale),
+      encourage: locale === 'kn'
+        ? 'ಅದ್ಭುತ! AI ನಿಮ್ಮ ಶೈಲಿ ಅರ್ಥಮಾಡಿಕೊಂಡಿದೆ'
+        : 'Excellent! AI understands your style',
     },
     expert: {
       color: 'bg-amber-500',
@@ -71,6 +80,9 @@ export default function TrainingStatusBar({ fileCount, typeBreakdown = {} }: Tra
       textColor: 'text-amber-700',
       icon: '\u2B50',
       label: t(strings.training.expertTraining, locale),
+      encourage: locale === 'kn'
+        ? 'ಶ್ರೇಷ್ಠ! ಅತ್ಯುತ್ತಮ ಗುಣಮಟ್ಟ'
+        : 'Expert! Best quality',
     },
   };
 
@@ -95,6 +107,13 @@ export default function TrainingStatusBar({ fileCount, typeBreakdown = {} }: Tra
           style={{ width: `${percent}%` }}
         />
       </div>
+
+      {/* Encouragement message */}
+      {fileCount > 0 && (
+        <p className={`text-sm font-medium ${config.textColor} mb-3`}>
+          {config.encourage}
+        </p>
+      )}
 
       {/* File Count */}
       <div className="flex items-center justify-between text-sm text-gray-600 mb-4">

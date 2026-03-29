@@ -17,7 +17,10 @@ import Link from 'next/link';
 
 interface FileProcessingStatus {
   fileName: string;
+  fileSize?: number;
   status: 'uploading' | 'processing' | 'done' | 'error';
+  uploadProgress: number; // 0-100
+  estimatedSeconds?: number;
   steps: {
     received: boolean;
     textExtracted: boolean;
@@ -100,12 +103,27 @@ export default function TrainPage() {
       return;
     }
 
+    // Estimate upload time: KSWAN ~3-5 Mbps = ~400 KB/s avg
+    const estSeconds = Math.max(2, Math.ceil(file.size / (400 * 1024)));
+
     const processingEntry: FileProcessingStatus = {
       fileName: file.name,
+      fileSize: file.size,
       status: 'uploading',
+      uploadProgress: 0,
+      estimatedSeconds: estSeconds,
       steps: { received: false, textExtracted: false, typeDetected: false, stored: false },
     };
     setProcessingFiles(prev => [processingEntry, ...prev]);
+
+    // Simulate upload progress (real progress not available from Supabase Storage SDK)
+    const progressInterval = setInterval(() => {
+      setProcessingFiles(prev => prev.map(p =>
+        p.fileName === file.name && p.uploadProgress < 90
+          ? { ...p, uploadProgress: p.uploadProgress + Math.floor(90 / estSeconds) }
+          : p
+      ));
+    }, 1000);
 
     try {
       setError('');
@@ -113,9 +131,10 @@ export default function TrainPage() {
       // Step 1: Upload
       setProcessingFiles(prev => prev.map(p =>
         p.fileName === file.name
-          ? { ...p, status: 'processing', steps: { ...p.steps, received: true } }
+          ? { ...p, status: 'processing', uploadProgress: 95, steps: { ...p.steps, received: true } }
           : p
       ));
+      clearInterval(progressInterval);
 
       const supabase = await createSPASassClient();
       const { error: uploadError } = await supabase.uploadFile(user!.id!, file.name, file);
@@ -156,9 +175,10 @@ export default function TrainPage() {
       }, 5000);
 
     } catch {
+      clearInterval(progressInterval);
       setProcessingFiles(prev => prev.map(p =>
         p.fileName === file.name
-          ? { ...p, status: 'error', error: t(strings.upload.uploadFailed, locale) }
+          ? { ...p, status: 'error', uploadProgress: 0, error: t(strings.upload.uploadFailed, locale) }
           : p
       ));
     }
@@ -320,11 +340,36 @@ export default function TrainPage() {
             }`}>
               <div className="flex items-center gap-2 mb-2">
                 <FileIcon className="h-4 w-4 text-gray-500" />
-                <span className="font-medium text-sm">{pf.fileName}</span>
-                {pf.status === 'processing' && (
-                  <Loader2 className="h-4 w-4 animate-spin text-blue-600 ml-auto" />
+                <span className="font-medium text-sm truncate">{pf.fileName}</span>
+                {pf.fileSize && (
+                  <span className="text-xs text-gray-400 ml-auto">
+                    {(pf.fileSize / 1024).toFixed(0)} KB
+                  </span>
                 )}
               </div>
+
+              {/* Upload progress bar */}
+              {pf.status === 'uploading' && (
+                <div className="mb-3">
+                  <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                    <span>{locale === 'kn' ? 'ಅಪ್\u200Cಲೋಡ್ ಆಗುತ್ತಿದೆ...' : 'Uploading...'}</span>
+                    <span>
+                      {pf.uploadProgress}%
+                      {pf.estimatedSeconds && pf.uploadProgress < 90 && (
+                        <> — {Math.max(1, pf.estimatedSeconds - Math.floor(pf.uploadProgress / (90 / pf.estimatedSeconds)))} {locale === 'kn' ? 'ಸೆಕೆಂಡ್ ಉಳಿದಿದೆ' : 's left'}</>
+                      )}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div
+                      className="bg-blue-500 h-2 rounded-full transition-all duration-1000"
+                      style={{ width: `${Math.min(pf.uploadProgress, 100)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Processing steps */}
               <div className="grid grid-cols-2 gap-1 text-xs">
                 <span>{pf.steps.received ? '\u2705' : '\u23F3'} {t(strings.training.fileReceived, locale)}</span>
                 <span>{pf.steps.textExtracted ? '\u2705' : '\u23F3'} {t(strings.training.textExtracted, locale)}</span>
