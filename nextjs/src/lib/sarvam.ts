@@ -48,7 +48,7 @@ async function callSarvamAPI(
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'sarvam-105b-instruct',  // FIX 2026-03-29: was 'sarvam-m' (small model, 8K ctx). 105B = 90/100 benchmark quality.
+        model: 'sarvam-105b',  // FIX 2026-03-29: was 'sarvam-m' (small model, 8K ctx). 105B = 90/100 benchmark quality.
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userContent },
@@ -82,7 +82,7 @@ async function callSarvamAPI(
   return {
     content,
     wordCount,
-    model: data.model || 'sarvam-105b-instruct',
+    model: data.model || 'sarvam-105b',
     tokensUsed: data.usage?.total_tokens || 0,
   };
 }
