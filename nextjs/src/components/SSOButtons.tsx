@@ -100,7 +100,7 @@ export default function SSOButtons({ onError }: SSOButtonsProps) {
                     <div className="w-full border-t border-gray-300"/>
                 </div>
                 <div className="relative flex justify-center text-sm">
-                    <span className="bg-white px-2 text-gray-500">Or continue with</span>
+                    <span className="bg-white px-2 text-gray-500">ಅಥವಾ / or</span>
                 </div>
             </div>
 
@@ -119,21 +119,22 @@ export default function SSOButtons({ onError }: SSOButtonsProps) {
                                 </div>
                             </div>
                             <span className="mx-auto text-sm font-semibold">
-                Continue with {config.name}
+                {config.name} ನೊಂದಿಗೆ ಮುಂದುವರಿಸಿ / Continue with {config.name}
               </span>
                         </button>
                     );
                 })}
             </div>
             <div className="mt-4 text-center text-xs text-gray-500">
-                By creating an account via selected provider, you agree to our{' '}
+                Google ಮೂಲಕ ಖಾತೆ ರಚಿಸುವುದರಿಂದ ನೀವು{' '}
                 <Link href="/legal/terms" className="text-blue-600 hover:text-blue-800 underline">
-                    Terms and Conditions
+                    ನಿಯಮಗಳು
                 </Link>
-                {' '}and{' '}
+                {' '}ಮತ್ತು{' '}
                 <Link href="/legal/privacy" className="text-blue-600 hover:text-blue-800 underline">
-                    Privacy Policy
+                    ಗೌಪ್ಯತಾ ನೀತಿ
                 </Link>
+                ಗೆ ಒಪ್ಪಿಗೆ ನೀಡುತ್ತೀರಿ
             </div>
         </div>
     );
