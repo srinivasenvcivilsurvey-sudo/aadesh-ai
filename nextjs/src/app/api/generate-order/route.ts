@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
 
     // ── PARSE & VALIDATE INPUT ───────────────────────────
     const body = await request.json();
-    const { orderType, caseDetails } = body;
+    const { orderType, caseDetails, previousCases } = body;
 
     if (!orderType || !caseDetails) {
       return NextResponse.json(
@@ -103,8 +103,13 @@ export async function POST(request: NextRequest) {
     const smartContext = await getSmartContext(adminClient, user.id, orderType, normalizedCaseDetails);
     const contextBlock = buildContextBlock(smartContext);
 
-    // Combine context + user input
-    const enrichedInput = contextBlock + normalizedCaseDetails;
+    // Append previous cases if provided
+    const prevCasesBlock = previousCases?.trim()
+      ? `\nಸಂಬಂಧಿತ ಹಿಂದಿನ ಪ್ರಕರಣ: ${normalizeNFKC(previousCases.trim())} — ಇದನ್ನು ಆದೇಶದಲ್ಲಿ ಉಲ್ಲೇಖಿಸಿ.\n`
+      : '';
+
+    // Combine context + previous cases + user input
+    const enrichedInput = contextBlock + prevCasesBlock + normalizedCaseDetails;
 
     // ── GENERATE ORDER ───────────────────────────────────
     const startTime = Date.now();

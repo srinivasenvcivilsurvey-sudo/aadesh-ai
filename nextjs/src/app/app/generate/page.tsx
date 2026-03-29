@@ -40,6 +40,7 @@ export default function GenerateOrderPage() {
   const { locale } = useLanguage();
   const [orderType, setOrderType] = useState<'appeal' | 'suo_motu'>('appeal');
   const [caseDetails, setCaseDetails] = useState('');
+  const [previousCases, setPreviousCases] = useState('');
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [generating, setGenerating] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -150,7 +151,7 @@ export default function GenerateOrderPage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ orderType, caseDetails: details }),
+        body: JSON.stringify({ orderType, caseDetails: details, previousCases: previousCases.trim() }),
       });
 
       const data = await response.json();
@@ -395,6 +396,20 @@ export default function GenerateOrderPage() {
                 className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500 resize-y"
               />
             </div>
+          </div>
+
+          {/* Previous Related Cases (Optional) */}
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">
+              {locale === 'kn' ? 'ಸಂಬಂಧಿತ ಹಿಂದಿನ ಪ್ರಕರಣಗಳು (ಐಚ್ಛಿಕ)' : 'Previous Related Cases (Optional)'}
+            </label>
+            <input
+              type="text"
+              value={previousCases}
+              onChange={(e) => setPreviousCases(e.target.value)}
+              placeholder={locale === 'kn' ? 'ಉದಾ: ಅಪೀಲು 11/2018-19, ದಿ: 28-10-2020' : 'e.g. Appeal 11/2018-19, date: 28-10-2020'}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+            />
           </div>
 
           {/* Generate Button */}

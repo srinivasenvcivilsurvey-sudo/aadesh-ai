@@ -34,7 +34,7 @@ async function callSarvamAPI(
   systemPrompt: string,
   userContent: string,
   apiKey: string,
-  maxTokens: number = 4096  // FIX 2026-03-29: sarvam-105b has large context (was 3500 for sarvam-m 8K limit)
+  maxTokens: number = 4096  // sarvam-105b has 128K context window — 4096 output tokens is safe
 ): Promise<OrderGenerationResponse> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 60_000);
