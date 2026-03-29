@@ -50,8 +50,21 @@ export default function GenerateOrderPage() {
   const [verified, setVerified] = useState(false);
   const [error, setError] = useState('');
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Elapsed timer during generation
+  useEffect(() => {
+    if (generating) {
+      setElapsedSeconds(0);
+      timerRef.current = setInterval(() => setElapsedSeconds(s => s + 1), 1000);
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current);
+    }
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [generating]);
 
   // Auto-save: when editedOrder changes, save after 10s of inactivity
   const triggerAutoSave = useCallback(() => {
@@ -278,12 +291,24 @@ export default function GenerateOrderPage() {
           <button
             onClick={handleGenerate}
             disabled={generating}
-            className="w-full py-3 px-6 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+            className="w-full py-4 px-6 bg-primary-600 text-white rounded-lg font-medium text-lg hover:bg-primary-700 disabled:opacity-70 disabled:cursor-not-allowed transition-colors flex flex-col items-center justify-center gap-1"
           >
             {generating ? (
-              <><Loader2 className="h-5 w-5 animate-spin" />{t(strings.generate.generating, locale)}</>
+              <>
+                <span className="flex items-center gap-2">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  {t(strings.generate.generating, locale)}
+                </span>
+                <span className="text-sm text-primary-200">
+                  {elapsedSeconds} {locale === 'kn' ? 'ಸೆಕೆಂಡ್ ಕಳೆದಿದೆ...' : 'seconds elapsed...'}
+                  {elapsedSeconds > 5 && (locale === 'kn' ? ' — ದಯವಿಟ್ಟು ಕಾಯಿರಿ' : ' — please wait')}
+                </span>
+              </>
             ) : (
-              <><FileText className="h-5 w-5" />{t(strings.generate.generateBtn, locale)}</>
+              <span className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                {t(strings.generate.generateBtn, locale)}
+              </span>
             )}
           </button>
         </CardContent>
@@ -347,16 +372,23 @@ export default function GenerateOrderPage() {
               </div>
             )}
 
-            {/* Editable Order Text */}
+            {/* Editable hint */}
+            <p className="text-xs text-gray-400 flex items-center gap-1">
+              <span>✏️</span>
+              {locale === 'kn' ? 'ಸಂಪಾದಿಸಬಹುದು — ಕ್ಲಿಕ್ ಮಾಡಿ ಬದಲಾಯಿಸಿ' : 'Editable — click to change'}
+            </p>
+
+            {/* Editable Order Text — styled like government document */}
             <div className="relative">
               <textarea
                 value={editedOrder}
                 onChange={(e) => setEditedOrder(e.target.value)}
-                rows={16}
-                className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm leading-relaxed font-sans focus:border-primary-500 focus:ring-1 focus:ring-primary-500 resize-y"
+                rows={18}
+                className="govt-document w-full rounded-lg border border-gray-200 px-8 py-6 leading-relaxed resize-y focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                style={{ fontFamily: "'Noto Sans Kannada', system-ui, sans-serif", fontSize: '15px', lineHeight: '1.8' }}
               />
               {/* Auto-save indicator */}
-              <div className="absolute top-2 right-2 flex items-center gap-1 text-xs text-gray-400">
+              <div className="absolute top-3 right-3 flex items-center gap-1 text-xs text-gray-400 bg-white/80 px-2 py-1 rounded">
                 {autoSaveStatus === 'saving' && (
                   <><Loader2 className="h-3 w-3 animate-spin" />{locale === 'kn' ? 'ಉಳಿಸಲಾಗುತ್ತಿದೆ...' : 'Saving...'}</>
                 )}
@@ -368,47 +400,60 @@ export default function GenerateOrderPage() {
 
             {/* Word count live display */}
             <div className="text-sm text-gray-500 text-right">
-              📝 {editedWordCount} {t(strings.common.words, locale)}
+              {editedWordCount} {t(strings.common.words, locale)}
               {editedWordCount >= 550 && editedWordCount <= 750
-                ? <span className="ml-2 text-green-600">\u2705</span>
-                : <span className="ml-2 text-amber-600">\u26A0\uFE0F</span>}
+                ? <span className="ml-2 text-green-600">✓</span>
+                : <span className="ml-2 text-amber-600">⚠</span>}
             </div>
 
-            {/* Verification Checkbox — MANDATORY before download */}
-            <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-              <input
-                type="checkbox"
-                id="verify-order"
-                checked={verified}
-                onChange={(e) => setVerified(e.target.checked)}
-                className="mt-1 h-5 w-5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-              />
-              <label htmlFor="verify-order" className="text-sm font-medium text-amber-800 cursor-pointer">
-                {t(strings.result.verifyCheckbox, locale)}
+            {/* Formal Verification Declaration — looks like official checkbox */}
+            <div className={`p-5 rounded-lg border-2 transition-colors ${
+              verified ? 'bg-green-50 border-green-300' : 'bg-amber-50 border-amber-200'
+            }`}>
+              <label htmlFor="verify-order" className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  id="verify-order"
+                  checked={verified}
+                  onChange={(e) => setVerified(e.target.checked)}
+                  className="mt-1 h-5 w-5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                />
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">
+                    {locale === 'kn'
+                      ? 'ನಾನು ಈ ಕರಡಿನಲ್ಲಿರುವ ಎಲ್ಲಾ ಸಂಗತಿಗಳು, ಉಲ್ಲೇಖಗಳು ಮತ್ತು ಕಾನೂನು ನಿಬಂಧನೆಗಳನ್ನು ಪರಿಶೀಲಿಸಿದ್ದೇನೆ ಮತ್ತು ಸಮ್ಮತಿಸುತ್ತೇನೆ.'
+                      : 'I have verified all facts, citations, and legal provisions in this draft and accept responsibility.'}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {locale === 'kn'
+                      ? '(AI-ಸಹಾಯಿತ ಕರಡು — ಅಧಿಕಾರಿ ಪರಿಶೀಲನೆ ಕಡ್ಡಾಯ)'
+                      : '(AI-assisted draft — Officer verification mandatory)'}
+                  </p>
+                </div>
               </label>
             </div>
 
-            {/* Download Buttons */}
+            {/* Download Buttons — Word is primary for government offices */}
             <div className="flex gap-4">
               <button
                 onClick={() => handleDownload('docx')}
                 disabled={!verified || downloading}
-                className={`flex-1 py-3 px-4 rounded-lg font-medium flex items-center justify-center gap-2 transition-colors ${
-                  verified && !downloading ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                className={`flex-1 py-4 px-4 rounded-lg font-medium text-base flex items-center justify-center gap-2 transition-colors ${
+                  verified && !downloading ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                 }`}
               >
                 {downloading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
-                {t(strings.result.downloadDocx, locale)}
+                {locale === 'kn' ? 'Word (.docx) ಡೌನ್\u200Cಲೋಡ್' : 'Download Word (.docx)'}
               </button>
               <button
                 onClick={() => handleDownload('pdf')}
                 disabled={!verified || downloading}
-                className={`flex-1 py-3 px-4 rounded-lg font-medium flex items-center justify-center gap-2 transition-colors ${
-                  verified && !downloading ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                className={`flex-1 py-4 px-4 rounded-lg font-medium text-base flex items-center justify-center gap-2 transition-colors ${
+                  verified && !downloading ? 'bg-gray-600 text-white hover:bg-gray-700' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                 }`}
               >
                 {downloading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
-                {t(strings.result.downloadPdf, locale)}
+                {locale === 'kn' ? 'PDF ಡೌನ್\u200Cಲೋಡ್' : 'Download PDF'}
               </button>
             </div>
 

@@ -134,10 +134,17 @@ export default function DashboardContent() {
                 <Card>
                     <CardContent className="pt-6">
                         <div className="text-center">
-                            <div className={`text-3xl font-bold ${creditsRemaining > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            <div className={`text-3xl font-bold ${
+                                creditsRemaining >= 5 ? 'credit-green' :
+                                creditsRemaining >= 2 ? 'credit-yellow' :
+                                'credit-red'
+                            }`}>
                                 {creditsRemaining}
                             </div>
                             <p className="text-sm text-gray-600 mt-1">{t(strings.dashboard.creditsLeft, locale)}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">
+                                ≈ {creditsRemaining} {locale === 'kn' ? 'ಆದೇಶಗಳಿಗೆ ಸಾಕು' : 'orders remaining'}
+                            </p>
                         </div>
                     </CardContent>
                 </Card>

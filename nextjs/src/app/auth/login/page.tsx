@@ -2,10 +2,25 @@
 'use client';
 
 import { createSPASassClient } from '@/lib/supabase/client';
-import {useEffect, useState} from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import SSOButtons from '@/components/SSOButtons';
+import { Loader2 } from 'lucide-react';
+
+// Map Supabase errors to Kannada
+function kannadaError(msg: string): string {
+    const lower = msg.toLowerCase();
+    if (lower.includes('invalid login') || lower.includes('invalid credentials'))
+        return 'ಇಮೇಲ್ ಅಥವಾ ಪಾಸ್\u200Cವರ್ಡ್ ತಪ್ಪಾಗಿದೆ';
+    if (lower.includes('email not confirmed'))
+        return 'ಇಮೇಲ್ ದೃಢೀಕರಿಸಿಲ್ಲ. ನಿಮ್ಮ ಇಮೇಲ್ ಪರಿಶೀಲಿಸಿ.';
+    if (lower.includes('too many requests') || lower.includes('rate limit'))
+        return 'ಹಲವು ಪ್ರಯತ್ನಗಳು. ಸ್ವಲ್ಪ ಸಮಯದ ನಂತರ ಪ್ರಯತ್ನಿಸಿ.';
+    if (lower.includes('network') || lower.includes('fetch'))
+        return 'ನೆಟ್\u200Cವರ್ಕ್ ಸಮಸ್ಯೆ — ಮತ್ತೊಮ್ಮೆ ಪ್ರಯತ್ನಿಸಿ';
+    return 'ಲಾಗಿನ್ ವಿಫಲವಾಯಿತು. ಮತ್ತೊಮ್ಮೆ ಪ್ರಯತ್ನಿಸಿ.';
+}
 
 export default function LoginPage() {
     const [email, setEmail] = useState('');
@@ -23,13 +38,10 @@ export default function LoginPage() {
         try {
             const client = await createSPASassClient();
             const { error: signInError } = await client.loginEmail(email, password);
-
             if (signInError) throw signInError;
 
-            // Check if MFA is required
             const supabase = client.getSupabaseClient();
             const { data: mfaData, error: mfaError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-
             if (mfaError) throw mfaError;
 
             if (mfaData.nextLevel === 'aal2' && mfaData.nextLevel !== mfaData.currentLevel) {
@@ -39,23 +51,15 @@ export default function LoginPage() {
                 return;
             }
         } catch (err) {
-            if (err instanceof Error) {
-                setError(err.message);
-            } else {
-                setError('An unknown error occurred');
-            }
+            setError(kannadaError(err instanceof Error ? err.message : 'unknown'));
         } finally {
             setLoading(false);
         }
     };
 
-
     useEffect(() => {
-        if(showMFAPrompt) {
-            router.push('/auth/2fa');
-        }
+        if (showMFAPrompt) router.push('/auth/2fa');
     }, [showMFAPrompt, router]);
-
 
     return (
         <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
@@ -68,66 +72,61 @@ export default function LoginPage() {
             <form onSubmit={handleSubmit} className="space-y-6">
                 <div>
                     <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                        Email address
+                        ಇಮೇಲ್ / Email
                     </label>
-                    <div className="mt-1">
-                        <input
-                            id="email"
-                            name="email"
-                            type="email"
-                            autoComplete="email"
-                            required
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            className="block w-full appearance-none rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-primary-500"
-                        />
-                    </div>
+                    <input
+                        id="email"
+                        name="email"
+                        type="email"
+                        autoComplete="email"
+                        required
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-3 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-primary-500"
+                    />
                 </div>
 
                 <div>
                     <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                        Password
+                        ಪಾಸ್{'\u200C'}ವರ್ಡ್ / Password
                     </label>
-                    <div className="mt-1">
-                        <input
-                            id="password"
-                            name="password"
-                            type="password"
-                            autoComplete="current-password"
-                            required
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            className="block w-full appearance-none rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-primary-500"
-                        />
-                    </div>
+                    <input
+                        id="password"
+                        name="password"
+                        type="password"
+                        autoComplete="current-password"
+                        required
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-3 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-primary-500"
+                    />
                 </div>
 
                 <div className="flex items-center justify-between">
-                    <div className="text-sm">
-                        <Link href="/auth/forgot-password" className="font-medium text-primary-600 hover:text-primary-500">
-                            Forgot your password?
-                        </Link>
-                    </div>
+                    <Link href="/auth/forgot-password" className="text-sm font-medium text-primary-600 hover:text-primary-500">
+                        ಪಾಸ್{'\u200C'}ವರ್ಡ್ ಮರೆತಿರಾ?
+                    </Link>
                 </div>
 
-                <div>
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className="flex w-full justify-center rounded-md border border-transparent bg-primary-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50"
-                    >
-                        {loading ? 'Signing in...' : 'Sign in'}
-                    </button>
-                </div>
+                <button
+                    type="submit"
+                    disabled={loading}
+                    className="flex w-full justify-center items-center gap-2 rounded-lg bg-primary-600 py-3 px-4 text-base font-medium text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50"
+                >
+                    {loading ? (
+                        <><Loader2 className="h-5 w-5 animate-spin" /> ಲಾಗಿನ್ ಆಗುತ್ತಿದೆ...</>
+                    ) : (
+                        'ಲಾಗಿನ್ / Sign in'
+                    )}
+                </button>
             </form>
 
-            <SSOButtons onError={setError} />
+            <SSOButtons onError={(msg: string) => setError(kannadaError(msg))} />
 
             <div className="mt-6 text-center text-sm">
-                <span className="text-gray-600">Don&#39;t have an account?</span>
-                {' '}
+                <span className="text-gray-600">ಖಾತೆ ಇಲ್ಲವೇ?</span>{' '}
                 <Link href="/auth/register" className="font-medium text-primary-600 hover:text-primary-500">
-                    Sign up
+                    ಸೈನ್ ಅಪ್ / Sign up
                 </Link>
             </div>
         </div>
