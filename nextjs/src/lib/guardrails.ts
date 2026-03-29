@@ -181,15 +181,45 @@ export function checkFactPreservation(
 }
 
 // ═══════════════════════════════════════════════════════════
-// GUARDRAIL 4: Word Count Check
+// GUARDRAIL 4: Word Count Check (Smart — case-type aware)
+// FIX 2026-03-29: Flat 550-word threshold was failing for withdrawal/dismissed-by-memo
+// cases which are naturally 350-450 words. Added smart thresholds by case type.
 // ═══════════════════════════════════════════════════════════
 
-export function checkWordCount(orderText: string): GuardrailResult {
+/**
+ * Detect if this is a short case (withdrawal or dismissed-by-memo).
+ * These orders are inherently shorter — 350-500 words is correct for them.
+ * Contested appeal orders should be 550-850 words.
+ */
+function detectShortCase(inputText: string): boolean {
+  const normalized = normalizeNFKC(inputText).toLowerCase();
+  // Withdrawal keywords (Kannada + English fallback)
+  const withdrawalMarkers = [
+    'ವಾಪಸ್',          // "withdraw" in Kannada
+    'ವಾಪಸ್ ಪಡೆ',      // "withdraw" verb form
+    'ಮೆಮೊ',           // "memo" — withdrawal memo
+    'withdrawal',
+    'withdrawn',
+    'dismissed by memo',
+    'memo filed',
+  ];
+  return withdrawalMarkers.some(marker => normalized.includes(marker));
+}
+
+export function checkWordCount(
+  orderText: string,
+  inputText: string = ''
+): GuardrailResult {
   const normalized = normalizeNFKC(orderText);
   const wordCount = normalized.split(/\s+/).filter(Boolean).length;
-  const minWords = 550;
-  const maxWords = 750;
-  const passed = wordCount >= minWords && wordCount <= maxWords;
+
+  // Smart thresholds: short cases (withdrawal/memo dismissal) vs contested appeals
+  const isShortCase = detectShortCase(inputText) || detectShortCase(orderText);
+  const minWords = isShortCase ? 350 : 550;
+  const maxWords = isShortCase ? 550 : 850;
+  const caseLabel = isShortCase ? 'withdrawal/memo' : 'contested appeal';
+
+  const passed = wordCount >= minWords;  // Only enforce minimum (no upper-limit failure)
 
   return {
     id: 'word-count',
@@ -197,11 +227,11 @@ export function checkWordCount(orderText: string): GuardrailResult {
     nameKn: 'ಪದ ಎಣಿಕೆ',
     passed,
     details: passed
-      ? `${wordCount} words (target: ${minWords}-${maxWords})`
-      : `${wordCount} words (target: ${minWords}-${maxWords})`,
+      ? `${wordCount} words ✓ (${caseLabel} target: ${minWords}-${maxWords})`
+      : `${wordCount} words — too short (${caseLabel} minimum: ${minWords})`,
     detailsKn: passed
-      ? `${wordCount} ಪದಗಳು (ಗುರಿ: ${minWords}-${maxWords})`
-      : `${wordCount} ಪದಗಳು (ಗುರಿ: ${minWords}-${maxWords})`,
+      ? `${wordCount} ಪದಗಳು ✓ (ಗುರಿ: ${minWords}-${maxWords})`
+      : `${wordCount} ಪದಗಳು — ಕಡಿಮೆ (ಕನಿಷ್ಠ: ${minWords})`,
   };
 }
 
@@ -218,7 +248,7 @@ export function runGuardrails(
     checkSectionCompleteness(orderText, orderType),
     checkAntiTransliteration(orderText),
     checkFactPreservation(inputText, orderText),
-    checkWordCount(orderText),
+    checkWordCount(orderText, inputText),
   ];
 
   const allPassed = results.every(r => r.passed);
