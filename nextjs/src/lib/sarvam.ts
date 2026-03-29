@@ -34,7 +34,7 @@ async function callSarvamAPI(
   systemPrompt: string,
   userContent: string,
   apiKey: string,
-  maxTokens: number = 4096
+  maxTokens: number = 4096  // FIX 2026-03-29: sarvam-105b has large context (was 3500 for sarvam-m 8K limit)
 ): Promise<OrderGenerationResponse> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 60_000);
@@ -48,7 +48,7 @@ async function callSarvamAPI(
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'sarvam-m',
+        model: 'sarvam-105b-instruct',  // FIX 2026-03-29: was 'sarvam-m' (small model, 8K ctx). 105B = 90/100 benchmark quality.
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userContent },
@@ -82,7 +82,7 @@ async function callSarvamAPI(
   return {
     content,
     wordCount,
-    model: data.model || 'sarvam-m',
+    model: data.model || 'sarvam-105b-instruct',
     tokensUsed: data.usage?.total_tokens || 0,
   };
 }
@@ -105,23 +105,28 @@ export async function generateOrder(
   try {
     return await callSarvamAPI(normalizedPrompt, normalizedDetails, apiKey);
   } catch (err1) {
-    console.error('Sarvam attempt 1 failed:', err1 instanceof Error ? err1.message : err1);
+    const msg1 = err1 instanceof Error ? err1.message : String(err1);
+    console.error('Sarvam attempt 1 failed:', msg1);
+    // 422 = context limit — retrying same input won't help, skip to reduced context
+    if (msg1.includes('422')) {
+      console.error('Context limit hit on attempt 1, skipping to reduced context');
+    } else {
+      // Wait 3 seconds before retry only for transient errors
+      await new Promise(r => setTimeout(r, 3000));
+
+      // Attempt 2: retry with full context
+      try {
+        return await callSarvamAPI(normalizedPrompt, normalizedDetails, apiKey);
+      } catch (err2) {
+        console.error('Sarvam attempt 2 failed:', err2 instanceof Error ? err2.message : err2);
+      }
+    }
   }
 
-  // Wait 3 seconds before retry
-  await new Promise(r => setTimeout(r, 3000));
-
-  // Attempt 2: retry with full context
-  try {
-    return await callSarvamAPI(normalizedPrompt, normalizedDetails, apiKey);
-  } catch (err2) {
-    console.error('Sarvam attempt 2 failed:', err2 instanceof Error ? err2.message : err2);
-  }
-
-  // Attempt 3: reduced context (trim user content to 50%)
+  // Attempt 3: reduced context — trim user content to 50% and use fewer output tokens
   const reducedDetails = normalizedDetails.slice(0, Math.floor(normalizedDetails.length * 0.5));
   try {
-    return await callSarvamAPI(normalizedPrompt, reducedDetails, apiKey);
+    return await callSarvamAPI(normalizedPrompt, reducedDetails, apiKey, 2000);
   } catch (err3) {
     console.error('Sarvam attempt 3 (reduced) failed:', err3 instanceof Error ? err3.message : err3);
     throw new Error('Sarvam API timeout: all 3 attempts failed');
