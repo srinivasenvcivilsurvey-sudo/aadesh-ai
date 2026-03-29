@@ -2,8 +2,7 @@
 'use client';
 
 import { createSPASassClient } from '@/lib/supabase/client';
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import Link from 'next/link';
 import SSOButtons from '@/components/SSOButtons';
 import { Loader2 } from 'lucide-react';
@@ -27,9 +26,6 @@ export default function LoginPage() {
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
-    const [showMFAPrompt, setShowMFAPrompt] = useState(false);
-    const router = useRouter();
-
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
@@ -40,26 +36,15 @@ export default function LoginPage() {
             const { error: signInError } = await client.loginEmail(email, password);
             if (signInError) throw signInError;
 
-            const supabase = client.getSupabaseClient();
-            const { data: mfaData, error: mfaError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-            if (mfaError) throw mfaError;
-
-            if (mfaData.nextLevel === 'aal2' && mfaData.nextLevel !== mfaData.currentLevel) {
-                setShowMFAPrompt(true);
-            } else {
-                router.push('/app');
-                return;
-            }
+            // Hard redirect — forces full page reload so auth cookies are read fresh
+            window.location.href = '/app';
+            return;
         } catch (err) {
             setError(kannadaError(err instanceof Error ? err.message : 'unknown'));
         } finally {
             setLoading(false);
         }
     };
-
-    useEffect(() => {
-        if (showMFAPrompt) router.push('/auth/2fa');
-    }, [showMFAPrompt, router]);
 
     return (
         <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
