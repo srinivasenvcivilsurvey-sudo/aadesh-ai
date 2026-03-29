@@ -148,10 +148,10 @@ export async function PUT(request: NextRequest) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // Add credits to profile
+    // Add credits to profile — FIX: 2026-03-29 — param names must match SQL function
     const { error: rpcError } = await adminClient.rpc('add_credits', {
-      p_user_id: user.id,
-      p_credits: pack.orders,
+      user_uuid: user.id,
+      amount: pack.orders,
     });
 
     if (rpcError) {

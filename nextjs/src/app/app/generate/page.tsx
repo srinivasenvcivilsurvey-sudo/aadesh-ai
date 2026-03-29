@@ -4,7 +4,7 @@ import { useGlobal } from '@/lib/context/GlobalContext';
 import { useLanguage } from '@/lib/context/LanguageContext';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { FileText, Upload, Loader2, Download, RefreshCw, AlertCircle, CheckCircle, ShieldCheck, ShieldAlert, Save } from 'lucide-react';
+import { FileText, Upload, Loader2, Download, RefreshCw, AlertCircle, CheckCircle, ShieldCheck, ShieldAlert, Save, Printer, WifiOff } from 'lucide-react';
 import strings, { t } from '@/lib/i18n';
 import { createSPASassClientAuthenticated } from '@/lib/supabase/client';
 
@@ -51,9 +51,20 @@ export default function GenerateOrderPage() {
   const [error, setError] = useState('');
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [isOffline, setIsOffline] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Offline/online detection
+  useEffect(() => {
+    const goOffline = () => setIsOffline(true);
+    const goOnline = () => setIsOffline(false);
+    setIsOffline(!navigator.onLine);
+    window.addEventListener('offline', goOffline);
+    window.addEventListener('online', goOnline);
+    return () => { window.removeEventListener('offline', goOffline); window.removeEventListener('online', goOnline); };
+  }, []);
 
   // Elapsed timer during generation
   useEffect(() => {
@@ -204,6 +215,14 @@ export default function GenerateOrderPage() {
 
   return (
     <div className="space-y-6 p-6">
+      {/* Offline Banner */}
+      {isOffline && (
+        <div className="offline-banner flex items-center justify-center gap-2">
+          <WifiOff className="h-4 w-4" />
+          {locale === 'kn' ? 'ಇಂಟರ್ನೆಟ್ ಸಂಪರ್ಕ ಇಲ್ಲ — ಮರುಸಂಪರ್ಕಗೊಂಡಾಗ ಪ್ರಯತ್ನಿಸಿ' : 'No internet connection — try again when connected'}
+        </div>
+      )}
+
       {/* Order Generation Form */}
       <Card>
         <CardHeader>
@@ -273,18 +292,109 @@ export default function GenerateOrderPage() {
             </div>
           </div>
 
-          {/* Case Details Textarea */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+          {/* Structured Case Details — with placeholder examples */}
+          <div className="space-y-4">
+            <label className="block text-sm font-medium text-gray-700">
               {t(strings.generate.caseDetails, locale)}
             </label>
-            <textarea
-              value={caseDetails}
-              onChange={(e) => setCaseDetails(e.target.value)}
-              placeholder={t(strings.generate.caseDetailsPlaceholder, locale)}
-              rows={8}
-              className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500 resize-y"
-            />
+
+            {/* Quick fields with examples */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">
+                  {locale === 'kn' ? 'ಪ್ರಕರಣ ಸಂಖ್ಯೆ' : 'Case Number'}
+                </label>
+                <input
+                  type="text"
+                  placeholder={locale === 'kn' ? 'ಉದಾ: 123/2025' : 'e.g. 123/2025'}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setCaseDetails(prev => {
+                      const lines = prev.split('\n');
+                      const idx = lines.findIndex(l => l.startsWith('ಪ್ರಕರಣ ಸಂಖ್ಯೆ:') || l.startsWith('Case:'));
+                      const newLine = `ಪ್ರಕರಣ ಸಂಖ್ಯೆ: ${val}`;
+                      if (idx >= 0) { lines[idx] = newLine; return lines.join('\n'); }
+                      return val ? `${newLine}\n${prev}` : prev;
+                    });
+                  }}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">
+                  {locale === 'kn' ? 'ಸರ್ವೆ ನಂಬರ್' : 'Survey Number'}
+                </label>
+                <input
+                  type="text"
+                  placeholder={locale === 'kn' ? 'ಉದಾ: 45/2' : 'e.g. 45/2'}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setCaseDetails(prev => {
+                      const lines = prev.split('\n');
+                      const idx = lines.findIndex(l => l.startsWith('ಸರ್ವೆ ನಂ:') || l.startsWith('Survey:'));
+                      const newLine = `ಸರ್ವೆ ನಂ: ${val}`;
+                      if (idx >= 0) { lines[idx] = newLine; return lines.join('\n'); }
+                      return val ? `${prev}\n${newLine}` : prev;
+                    });
+                  }}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">
+                  {locale === 'kn' ? 'ಗ್ರಾಮ' : 'Village'}
+                </label>
+                <input
+                  type="text"
+                  placeholder={locale === 'kn' ? 'ಉದಾ: ಹೆಸರಘಟ್ಟ' : 'e.g. Hesaraghatta'}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setCaseDetails(prev => {
+                      const lines = prev.split('\n');
+                      const idx = lines.findIndex(l => l.startsWith('ಗ್ರಾಮ:') || l.startsWith('Village:'));
+                      const newLine = `ಗ್ರಾಮ: ${val}`;
+                      if (idx >= 0) { lines[idx] = newLine; return lines.join('\n'); }
+                      return val ? `${prev}\n${newLine}` : prev;
+                    });
+                  }}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">
+                  {locale === 'kn' ? 'ಮೇಲ್ಮನವಿದಾರರು' : 'Appellant Name'}
+                </label>
+                <input
+                  type="text"
+                  placeholder={locale === 'kn' ? 'ಉದಾ: ರಾಮಯ್ಯ ಬಿನ್ ಕೃಷ್ಣಪ್ಪ' : 'e.g. Ramaiah bin Krishnappa'}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setCaseDetails(prev => {
+                      const lines = prev.split('\n');
+                      const idx = lines.findIndex(l => l.startsWith('ಮೇಲ್ಮನವಿದಾರರು:') || l.startsWith('Appellant:'));
+                      const newLine = `ಮೇಲ್ಮನವಿದಾರರು: ${val}`;
+                      if (idx >= 0) { lines[idx] = newLine; return lines.join('\n'); }
+                      return val ? `${prev}\n${newLine}` : prev;
+                    });
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Full details textarea — for pasting or additional info */}
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">
+                {locale === 'kn' ? 'ಹೆಚ್ಚುವರಿ ವಿವರಗಳು (ಅಥವಾ ಎಲ್ಲಾ ವಿವರಗಳನ್ನು ಇಲ್ಲಿ ಪೇಸ್ಟ್ ಮಾಡಿ)' : 'Additional details (or paste all details here)'}
+              </label>
+              <textarea
+                value={caseDetails}
+                onChange={(e) => setCaseDetails(e.target.value)}
+                placeholder={t(strings.generate.caseDetailsPlaceholder, locale)}
+                rows={6}
+                className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500 resize-y"
+              />
+            </div>
           </div>
 
           {/* Generate Button */}
@@ -433,8 +543,8 @@ export default function GenerateOrderPage() {
               </label>
             </div>
 
-            {/* Download Buttons — Word is primary for government offices */}
-            <div className="flex gap-4">
+            {/* Download & Print Buttons — Word is primary for government offices */}
+            <div className="flex gap-4 no-print">
               <button
                 onClick={() => handleDownload('docx')}
                 disabled={!verified || downloading}
@@ -451,17 +561,27 @@ export default function GenerateOrderPage() {
                 className={`flex-1 py-4 px-4 rounded-lg font-medium text-base flex items-center justify-center gap-2 transition-colors ${
                   verified && !downloading ? 'bg-gray-600 text-white hover:bg-gray-700' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                 }`}
+                title={locale === 'kn' ? 'PDF ಬೆಂಬಲ ಶೀಘ್ರದಲ್ಲಿ — DOCX ಡೌನ್\u200Cಲೋಡ್ ಆಗುತ್ತದೆ' : 'PDF coming soon — downloads as DOCX'}
               >
                 {downloading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
                 {locale === 'kn' ? 'PDF ಡೌನ್\u200Cಲೋಡ್' : 'Download PDF'}
               </button>
             </div>
 
+            {/* Print Button */}
+            <button
+              onClick={() => window.print()}
+              className="w-full py-3 px-4 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-center gap-2 no-print"
+            >
+              <Printer className="h-4 w-4" />
+              {locale === 'kn' ? 'ಮುದ್ರಿಸಿ' : 'Print'}
+            </button>
+
             {/* Regenerate */}
             <button
               onClick={handleGenerate}
               disabled={generating}
-              className="w-full py-2 px-4 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+              className="w-full py-2 px-4 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-center gap-2 no-print"
             >
               <RefreshCw className="h-4 w-4" />
               {t(strings.result.regenerate, locale)}

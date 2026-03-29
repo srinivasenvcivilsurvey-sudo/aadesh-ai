@@ -371,11 +371,26 @@
   }
   .govt-document .header { text-align: center; font-weight: 700; }
   .govt-document .signature { text-align: right; margin-top: 1.5rem; }
-  /* Print stylesheet */
+  /* Print stylesheet — hide everything except the order */
   @media print {
-    nav, .sidebar, header, button, .no-print { display: none !important; }
-    .govt-document { border: none; box-shadow: none; max-height: none; padding: 0; }
-    body { font-size: 14px; }
+    nav, .sidebar, header, footer, button, .no-print,
+    [class*="fixed"], [class*="sticky"],
+    [class*="shadow-sm"], [class*="border-b"] { display: none !important; }
+    .govt-document {
+      border: none !important; box-shadow: none !important;
+      max-height: none !important; padding: 1cm !important;
+      overflow: visible !important;
+    }
+    main { padding: 0 !important; }
+    .lg\\:pl-64 { padding-left: 0 !important; }
+    body { font-size: 12pt; color: #000; background: #fff; }
+    @page { margin: 1.5cm 2cm; }
+  }
+  /* Offline banner */
+  .offline-banner {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+    background: #f56565; color: white; text-align: center;
+    padding: 8px 16px; font-size: 14px; font-weight: 500;
   }
   /* Credit color coding */
   .credit-green { color: #38a169; }

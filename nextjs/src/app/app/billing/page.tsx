@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { CreditCard, Check, AlertCircle, CheckCircle } from 'lucide-react';
 import strings, { t } from '@/lib/i18n';
+import { useLanguage } from '@/lib/context/LanguageContext';
 import { createSPASassClientAuthenticated } from '@/lib/supabase/client';
 
 declare global {
@@ -15,18 +16,18 @@ declare global {
 }
 
 const PACKS = [
-  { id: 'pack_a', name: 'Pack A', orders: 30, price: 499, perOrder: '₹16.6' },
-  { id: 'pack_b', name: 'Pack B', orders: 75, price: 999, perOrder: '₹13.3' },
-  { id: 'pack_c', name: 'Pack C', orders: 200, price: 1999, perOrder: '₹10.0' },
-  { id: 'pack_d', name: 'Pack D', orders: 600, price: 4999, perOrder: '₹8.3', bestValue: true },
+  { id: 'pack_a', name: 'ಪ್ಯಾಕ್ A', nameEn: 'Pack A', orders: 30, price: 499, perOrder: '₹16.6' },
+  { id: 'pack_b', name: 'ಪ್ಯಾಕ್ B', nameEn: 'Pack B', orders: 75, price: 999, perOrder: '₹13.3' },
+  { id: 'pack_c', name: 'ಪ್ಯಾಕ್ C', nameEn: 'Pack C', orders: 200, price: 1999, perOrder: '₹10.0' },
+  { id: 'pack_d', name: 'ಪ್ಯಾಕ್ D', nameEn: 'Pack D', orders: 600, price: 4999, perOrder: '₹8.3', bestValue: true },
 ];
 
 export default function BillingPage() {
   const { user } = useGlobal();
+  const { locale } = useLanguage();
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const locale = 'kn';
 
   const loadRazorpayScript = (): Promise<boolean> => {
     return new Promise((resolve) => {
@@ -91,11 +92,14 @@ export default function BillingPage() {
           color: '#4F46E5',
         },
         handler: async (response: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {
-          // Verify payment
+          // Verify payment — FIX: 2026-03-29 — include auth header (was missing, causing 401)
           try {
             const verifyResponse = await fetch('/api/razorpay', {
               method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session.access_token}`,
+              },
               body: JSON.stringify({
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_payment_id: response.razorpay_payment_id,
@@ -172,7 +176,7 @@ export default function BillingPage() {
                   </div>
                 )}
 
-                <h3 className="text-lg font-bold text-gray-900">{pack.name}</h3>
+                <h3 className="text-lg font-bold text-gray-900">{locale === 'kn' ? pack.name : pack.nameEn}</h3>
                 <div className="mt-2">
                   <span className="text-3xl font-bold text-primary-600">₹{pack.price.toLocaleString('en-IN')}</span>
                 </div>

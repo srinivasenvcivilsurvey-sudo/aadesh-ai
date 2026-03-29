@@ -86,7 +86,7 @@ const strings = {
     review: { kn: 'ಪುನರ್ವಿಮರ್ಶೆ', en: 'Review' },
     other: { kn: 'ಇತರೆ', en: 'Other' },
     caseDetails: { kn: 'ಪ್ರಕರಣ ವಿವರಗಳು', en: 'Case Details' },
-    caseDetailsPlaceholder: { kn: 'ಪ್ರಕರಣದ ಎಲ್ಲಾ ವಿವರಗಳನ್ನು ಇಲ್ಲಿ ನಮೂದಿಸಿ...', en: 'Enter all case details here...' },
+    caseDetailsPlaceholder: { kn: 'ಉದಾ:\nಮೇಲ್ಮನವಿ ಸಂಖ್ಯೆ: 123/2024-25\nಮೇಲ್ಮನವಿದಾರರು: [ಹೆಸರು]\nಎದುರುದಾರರು: [ಹೆಸರು]\nಸರ್ವೆ ನಂ: 45/2, ಗ್ರಾಮ: [ಹೆಸರು]\nವಿಷಯ: ಪಹಣಿಯಲ್ಲಿ ಹೆಸರು ತಿದ್ದುಪಡಿ\nಪ್ರಕರಣದ ವಿವರಗಳನ್ನು ಇಲ್ಲಿ ನಮೂದಿಸಿ...', en: 'Example:\nAppeal No: 123/2024-25\nAppellant: [Name]\nRespondent: [Name]\nSurvey No: 45/2, Village: [Name]\nSubject: Correction in RTC\nEnter full case details here...' },
     generateBtn: { kn: 'ಆದೇಶ ರಚಿಸಿ', en: 'Generate Order' },
     generating: { kn: 'ರಚಿಸಲಾಗುತ್ತಿದೆ...', en: 'Generating...' },
     creditsRemaining: { kn: 'ಉಳಿದ ಕ್ರೆಡಿಟ್\u200Cಗಳು', en: 'Credits remaining' },

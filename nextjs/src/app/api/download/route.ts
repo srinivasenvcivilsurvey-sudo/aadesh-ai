@@ -71,14 +71,15 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // PDF: Generate a basic PDF with the Kannada text
+    // PDF: Kannada font embedding not yet supported — return DOCX as fallback
+    // FIX: 2026-03-29 — Previous raw PDF generator replaced all Kannada with '?'
     if (format === 'pdf') {
-      const buffer = generatePdf(orderText);
+      const buffer = await generatePdf(orderText, orderType);
       return new NextResponse(new Uint8Array(buffer), {
         status: 200,
         headers: {
-          'Content-Type': 'application/pdf',
-          'Content-Disposition': `attachment; filename="aadesh_order_${new Date().toISOString().split('T')[0]}.pdf"`,
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'Content-Disposition': `attachment; filename="aadesh_order_${new Date().toISOString().split('T')[0]}.docx"`,
         },
       });
     }
@@ -179,79 +180,16 @@ async function generateDocx(orderText: string, orderType?: string): Promise<Buff
 }
 
 // ═══════════════════════════════════════════════════════════
-// PDF Generation (basic — proper Kannada rendering needs font embedding)
-// For Phase 0, creates a valid PDF with UTF-8 text.
-// Kannada will render correctly if the PDF viewer has the font installed.
+// PDF Generation — uses DOCX-to-PDF workaround for Kannada
+// Since raw PDF can't render Kannada without embedded fonts,
+// we generate the DOCX and return it with a .pdf-compatible message.
+// Phase 1A will add proper Kannada PDF via server-side font embedding.
 // ═══════════════════════════════════════════════════════════
 
-function generatePdf(orderText: string): Buffer {
-  // Build a minimal PDF that stores the text as Unicode
-  // This uses PDF's built-in Identity-H CMap for Unicode support
-  // Note: Without embedded font, viewers need Noto Sans Kannada installed
-  const textLines = orderText.split('\n');
-  const encodedLines = textLines.map(line => escapeForPdf(line));
-
-  // Build PDF manually (simple text-based PDF)
-  const content = `%PDF-1.4
-1 0 obj
-<< /Type /Catalog /Pages 2 0 R >>
-endobj
-
-2 0 obj
-<< /Type /Pages /Kids [3 0 R] /Count 1 >>
-endobj
-
-3 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842]
-   /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
-endobj
-
-5 0 obj
-<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
-endobj
-
-4 0 obj
-<< /Length ${calculateStreamLength(encodedLines)} >>
-stream
-BT
-/F1 11 Tf
-72 770 Td
-14 TL
-${encodedLines.map(l => `(${l}) '`).join('\n')}
-ET
-endstream
-endobj
-
-xref
-0 6
-0000000000 65535 f
-0000000009 00000 n
-0000000058 00000 n
-0000000115 00000 n
-0000000309 00000 n
-0000000242 00000 n
-
-trailer
-<< /Size 6 /Root 1 0 R >>
-startxref
-${400 + calculateStreamLength(encodedLines)}
-%%EOF`;
-
-  return Buffer.from(content, 'latin1');
-}
-
-function escapeForPdf(text: string): string {
-  // For a basic PDF, replace special chars and encode to Latin-1 compatible
-  // Note: Kannada characters won't render in this basic PDF — they need embedded fonts
-  // This creates a valid PDF structure; proper Kannada PDF requires Phase 1A font embedding
-  return text
-    .replace(/\\/g, '\\\\')
-    .replace(/\(/g, '\\(')
-    .replace(/\)/g, '\\)')
-    .replace(/[^\x20-\x7E]/g, '?'); // Replace non-ASCII with ? for basic PDF
-}
-
-function calculateStreamLength(lines: string[]): number {
-  const content = `BT\n/F1 11 Tf\n72 770 Td\n14 TL\n${lines.map(l => `(${l}) '`).join('\n')}\nET`;
-  return content.length;
+async function generatePdf(orderText: string, orderType?: string): Promise<Buffer> {
+  // FIX: 2026-03-29 — Raw PDF generator replaced ALL Kannada chars with '?'
+  // Workaround: Generate DOCX instead (which renders Kannada perfectly)
+  // and return it. The download route will set the correct content-type.
+  // Users get a working document they can open and print.
+  return generateDocx(orderText, orderType);
 }

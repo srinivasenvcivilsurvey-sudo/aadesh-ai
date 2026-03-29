@@ -46,17 +46,16 @@ export default function VerifyEmailPage() {
                 </div>
 
                 <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                    Check your email
+                    ನಿಮ್ಮ ಇಮೇಲ್ ಪರಿಶೀಲಿಸಿ / Check your email
                 </h2>
 
                 <p className="text-gray-600 mb-8">
-                    We&#39;ve sent you an email with a verification link.
-                    Please check your inbox and click the link to verify your account.
+                    ನಿಮಗೆ ಪರಿಶೀಲನೆ ಲಿಂಕ್ ಇಮೇಲ್ ಕಳುಹಿಸಲಾಗಿದೆ. ದಯವಿಟ್ಟು ಇಮೇಲ್ ತೆರೆದು ಲಿಂಕ್ ಕ್ಲಿಕ್ ಮಾಡಿ.
                 </p>
 
                 <div className="space-y-4">
                     <p className="text-sm text-gray-500">
-                        Didn&#39;t receive the email? Check your spam folder or enter your email to resend:
+                        ಇಮೇಲ್ ಬಂದಿಲ್ಲವೇ? ಸ್ಪ್ಯಾಮ್ ಫೋಲ್ಡರ್ ಪರಿಶೀಲಿಸಿ ಅಥವಾ ಮರುಕಳುಹಿಸಲು ಇಮೇಲ್ ನಮೂದಿಸಿ:
                     </p>
 
                     {error && (
@@ -67,7 +66,7 @@ export default function VerifyEmailPage() {
 
                     {success && (
                         <div className="text-sm text-green-600 bg-green-50 rounded-md p-3">
-                            Verification email has been resent successfully.
+                            ಪರಿಶೀಲನೆ ಇಮೇಲ್ ಮರುಕಳುಹಿಸಲಾಗಿದೆ!
                         </div>
                     )}
 
@@ -76,7 +75,7 @@ export default function VerifyEmailPage() {
                             type="email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            placeholder="Enter your email address"
+                            placeholder="ನಿಮ್ಮ ಇಮೇಲ್ ನಮೂದಿಸಿ / Enter your email"
                             className="block w-full appearance-none rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-primary-500 text-sm"
                         />
                     </div>
@@ -86,7 +85,7 @@ export default function VerifyEmailPage() {
                         onClick={resendVerificationEmail}
                         disabled={loading}
                     >
-                        {loading ? 'Sending...' : 'Click here to resend'}
+                        {loading ? 'ಕಳುಹಿಸಲಾಗುತ್ತಿದೆ...' : 'ಮರುಕಳುಹಿಸಿ / Resend'}
                     </button>
                 </div>
 
@@ -95,7 +94,7 @@ export default function VerifyEmailPage() {
                         href="/auth/login"
                         className="text-sm font-medium text-primary-600 hover:text-primary-500"
                     >
-                        Return to login
+                        ← ಲಾಗಿನ್ ಪುಟಕ್ಕೆ / Return to login
                     </Link>
                 </div>
             </div>
