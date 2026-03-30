@@ -2,7 +2,6 @@
 
 import { createSPASassClient } from '@/lib/supabase/client';
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import SSOButtons from "@/components/SSOButtons";
 import { Loader2 } from 'lucide-react';
@@ -22,12 +21,13 @@ function kannadaError(msg: string): string {
 
 export default function RegisterPage() {
     const [email, setEmail] = useState('');
+    const [fullName, setFullName] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [acceptedTerms, setAcceptedTerms] = useState(false);
-    const router = useRouter();
+    const [registered, setRegistered] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -46,15 +46,37 @@ export default function RegisterPage() {
 
         try {
             const supabase = await createSPASassClient();
-            const { error } = await supabase.registerEmail(email, password);
+            const { error } = await supabase.registerEmail(email, password, fullName || undefined);
             if (error) throw error;
-            router.push('/auth/verify-email');
+            setRegistered(true);
         } catch (err: Error | unknown) {
             setError(kannadaError(err instanceof Error ? err.message : 'unknown'));
         } finally {
             setLoading(false);
         }
     };
+
+    if (registered) {
+        return (
+            <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10 text-center">
+                <div className="mb-4 p-4 text-sm text-green-700 bg-green-100 rounded-lg">
+                    <p className="text-lg font-semibold mb-2">
+                        {'\u2709\uFE0F'} ಇಮೇಲ್ ದೃಢೀಕರಣ ಲಿಂಕ್ ಕಳುಹಿಸಲಾಗಿದೆ
+                    </p>
+                    <p>
+                        <strong>{email}</strong> ಗೆ ದೃಢೀಕರಣ ಲಿಂಕ್ ಕಳುಹಿಸಲಾಗಿದೆ.
+                        <br />ದಯವಿಟ್ಟು ನಿಮ್ಮ inbox ಪರಿಶೀಲಿಸಿ ಮತ್ತು ಲಿಂಕ್ ಕ್ಲಿಕ್ ಮಾಡಿ.
+                    </p>
+                    <p className="mt-2 text-gray-600 text-xs">
+                        Verification link sent to your email. Please check your inbox.
+                    </p>
+                </div>
+                <Link href="/auth/login" className="mt-4 inline-block font-medium text-primary-600 hover:text-primary-500">
+                    {'\u2190'} ಲಾಗಿನ್ ಪುಟಕ್ಕೆ ಹಿಂತಿರುಗಿ / Back to Login
+                </Link>
+            </div>
+        );
+    }
 
     return (
         <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
@@ -65,6 +87,23 @@ export default function RegisterPage() {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-6">
+                <div>
+                    <label htmlFor="fullName" className="block text-sm font-medium text-gray-700">
+                        ಹೆಸರು / Full Name
+                    </label>
+                    <input
+                        id="fullName"
+                        name="fullName"
+                        type="text"
+                        autoComplete="name"
+                        required
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
+                        placeholder="ನಿಮ್ಮ ಪೂರ್ಣ ಹೆಸರು"
+                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-3 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-primary-500"
+                    />
+                </div>
+
                 <div>
                     <label htmlFor="email" className="block text-sm font-medium text-gray-700">
                         ಇಮೇಲ್ / Email

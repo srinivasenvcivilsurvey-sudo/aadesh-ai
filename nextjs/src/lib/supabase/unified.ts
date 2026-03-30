@@ -24,10 +24,11 @@ export class SassClient {
         });
     }
 
-    async registerEmail(email: string, password: string) {
+    async registerEmail(email: string, password: string, fullName?: string) {
         return this.client.auth.signUp({
             email: email,
-            password: password
+            password: password,
+            options: fullName ? { data: { full_name: fullName } } : undefined
         });
     }
 
