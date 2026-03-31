@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateOrder, DEFAULT_SYSTEM_PROMPT, normalizeNFKC } from '@/lib/sarvam';
+import { generateOrderSmart, DEFAULT_SYSTEM_PROMPT, normalizeNFKC } from '@/lib/sarvam';
 import { runGuardrails } from '@/lib/guardrails';
 import { createClient } from '@supabase/supabase-js';
 import { checkRateLimit } from '@/lib/rateLimit';
@@ -45,9 +45,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!['appeal', 'suo_motu'].includes(orderType)) {
+    if (!['appeal', 'suo_motu', 'contested', 'withdrawal'].includes(orderType)) {
       return NextResponse.json(
-        { error: 'Invalid orderType. Must be "appeal" or "suo_motu"' },
+        { error: 'Invalid orderType. Must be "contested", "withdrawal", "appeal", or "suo_motu"' },
         { status: 400 }
       );
     }
@@ -59,7 +59,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ── CHECK SARVAM API KEY ─────────────────────────────
+    // FIX 2026-03-31: previousCases was missing length validation — bypass for MAX_INPUT_LENGTH check
+    if (previousCases && typeof previousCases === 'string' && previousCases.length > MAX_INPUT_LENGTH) {
+      return NextResponse.json(
+        { error: `ಹಿಂದಿನ ಪ್ರಕರಣ ವಿವರ ತುಂಬಾ ದೊಡ್ಡದಾಗಿದೆ (ಗರಿಷ್ಠ ${MAX_INPUT_LENGTH} ಅಕ್ಷರಗಳು)` },
+        { status: 400 }
+      );
+    }
+
+    // ── CHECK API KEYS ───────────────────────────────────
     const sarvamKey = process.env.SARVAM_API_KEY;
     if (!sarvamKey) {
       console.error('SARVAM_API_KEY not configured');
@@ -68,6 +76,8 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
+    // OpenRouter key for contested appeals (Sonnet 4.6)
+    const openRouterKey = process.env.OPENROUTER_API_KEY || undefined;
 
     // ── CHECK CREDITS ────────────────────────────────────
     // Use service role client for DB operations (bypasses RLS)
@@ -78,7 +88,7 @@ export async function POST(request: NextRequest) {
 
     const { data: profile, error: profileError } = await adminClient
       .from('profiles')
-      .select('credits_remaining')
+      .select('credits_remaining, total_orders_generated')
       .eq('id', user.id)
       .single();
 
@@ -111,21 +121,33 @@ export async function POST(request: NextRequest) {
     // Combine context + previous cases + user input
     const enrichedInput = contextBlock + prevCasesBlock + normalizedCaseDetails;
 
-    // ── GENERATE ORDER ───────────────────────────────────
+    // ── GENERATE ORDER (smart routing) ──────────────────
+    // contested → Claude Sonnet 4.6 via OpenRouter (₹12, 96/100, 1200+ words)
+    // withdrawal / suo_motu → Sarvam 105B (FREE, fast)
     const startTime = Date.now();
-    const result = await generateOrder(
+    const result = await generateOrderSmart(
       {
         orderType,
         caseDetails: enrichedInput,
         systemPrompt: DEFAULT_SYSTEM_PROMPT,
       },
-      sarvamKey
+      sarvamKey,
+      openRouterKey
     );
     const generationTime = ((Date.now() - startTime) / 1000).toFixed(1);
 
+    // ── DATE PLACEHOLDER REPLACEMENT ────────────────────
+    // Replace [DD-MM-YYYY] in FIXED TEXT 2 and FIXED TEXT 4 with the final hearing date
+    // from case input. Falls back to [___] if no date found.
+    const extractedDate = normalizedCaseDetails.match(/\b(\d{2})[-\/.](\d{2})[-\/.](\d{4})\b/);
+    const orderDate = extractedDate
+      ? `${extractedDate[1]}-${extractedDate[2]}-${extractedDate[3]}`
+      : '[___]';
+    const processedContent = result.content.replace(/\[DD-MM-YYYY\]/g, orderDate);
+
     // ── PLACEHOLDER CHECK ────────────────────────────────
     // Reject output if AI returned unfilled template brackets like [NAME], [DATE]
-    const unfilledPlaceholders = result.content.match(/\[[A-Z][A-Z_]{2,}\]/g);
+    const unfilledPlaceholders = processedContent.match(/\[[A-Z][A-Z_]{2,}\]/g);
     if (unfilledPlaceholders) {
       console.error('Unfilled placeholders detected:', unfilledPlaceholders);
       return NextResponse.json(
@@ -139,7 +161,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ── RUN GUARDRAILS ───────────────────────────────────
-    const guardrails = runGuardrails(result.content, orderType, normalizedCaseDetails);
+    const guardrails = runGuardrails(processedContent, orderType, normalizedCaseDetails);
 
     // ── SAVE ORDER TO DATABASE ───────────────────────────
     const { data: savedOrder, error: saveError } = await adminClient
@@ -148,7 +170,7 @@ export async function POST(request: NextRequest) {
         user_id: user.id,
         case_type: orderType,
         input_text: normalizedCaseDetails,
-        generated_order: result.content,
+        generated_order: processedContent,
         score: guardrails.allPassed ? 90 : 70,
         model_used: result.model,
         verified: false,
@@ -162,28 +184,26 @@ export async function POST(request: NextRequest) {
     }
 
     // ── DEDUCT 1 CREDIT ──────────────────────────────────
+    // FIX 2026-03-30: Removed nested await inside .update() — the inner SELECT
+    // was causing the UPDATE to fail silently. Now uses profile data already fetched above.
     const { error: creditError } = await adminClient
       .from('profiles')
       .update({
         credits_remaining: profile.credits_remaining - 1,
-        total_orders_generated: (await adminClient
-          .from('profiles')
-          .select('total_orders_generated')
-          .eq('id', user.id)
-          .single()
-        ).data?.total_orders_generated + 1 || 1,
+        total_orders_generated: (profile.total_orders_generated ?? 0) + 1,
         updated_at: new Date().toISOString(),
       })
       .eq('id', user.id);
 
     if (creditError) {
       console.error('Credit deduction error:', creditError);
+      // Order was saved successfully — log for reconciliation, do not block response
     }
 
     // ── RESPOND ──────────────────────────────────────────
     return NextResponse.json({
       success: true,
-      order: result.content,
+      order: processedContent,
       orderId: savedOrder?.id || null,
       metadata: {
         wordCount: result.wordCount,
@@ -196,6 +216,7 @@ export async function POST(request: NextRequest) {
         refsUsed: smartContext.refsUsed,
         totalRefs: smartContext.totalRefs,
         refSource: smartContext.source,
+        degraded: result.degraded ?? false,
       },
       guardrails: {
         results: guardrails.results,

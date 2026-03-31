@@ -184,27 +184,46 @@ export function checkFactPreservation(
 // GUARDRAIL 4: Word Count Check (Smart — case-type aware)
 // FIX 2026-03-29: Flat 550-word threshold was failing for withdrawal/dismissed-by-memo
 // cases which are naturally 350-450 words. Added smart thresholds by case type.
+// FIX 2026-03-30: Updated to real order averages: contested=1,200–1,700; suo_motu=650–850; withdrawal=400–550.
 // ═══════════════════════════════════════════════════════════
 
+type CaseCategory = 'withdrawal' | 'suo_motu' | 'contested';
+
 /**
- * Detect if this is a short case (withdrawal or dismissed-by-memo).
- * These orders are inherently shorter — 350-500 words is correct for them.
- * Contested appeal orders should be 550-850 words.
+ * Detect case category from input or output text.
+ * Priority: withdrawal > suo_motu > contested (default).
  */
-function detectShortCase(inputText: string): boolean {
-  const normalized = normalizeNFKC(inputText).toLowerCase();
-  // Withdrawal keywords (Kannada + English fallback)
+function detectCaseCategory(inputText: string, orderText: string = ''): CaseCategory {
+  const combined = normalizeNFKC(inputText + ' ' + orderText).toLowerCase();
+
   const withdrawalMarkers = [
-    'ವಾಪಸ್',          // "withdraw" in Kannada
-    'ವಾಪಸ್ ಪಡೆ',      // "withdraw" verb form
-    'ಮೆಮೊ',           // "memo" — withdrawal memo
+    'ವಾಪಸ್',
+    'ವಾಪಸ್ ಪಡೆ',
+    'ಮೆಮೊ',
     'withdrawal',
     'withdrawn',
     'dismissed by memo',
     'memo filed',
   ];
-  return withdrawalMarkers.some(marker => normalized.includes(marker));
+  if (withdrawalMarkers.some(m => combined.includes(m))) return 'withdrawal';
+
+  const suoMotuMarkers = [
+    'ಸ್ವಯಂಪ್ರೇರಿತ',
+    'ಸ್ವಯಂ ಪ್ರೇರಿತ',
+    'suo motu',
+    'suo-motu',
+    'ಪುನರ್ವಿಮರ್ಶೆ',
+  ];
+  if (suoMotuMarkers.some(m => combined.includes(m))) return 'suo_motu';
+
+  return 'contested';
 }
+
+const WORD_COUNT_TARGETS: Record<CaseCategory, { min: number; max: number; label: string }> = {
+  withdrawal: { min: 400, max: 550,  label: 'withdrawal/memo' },
+  suo_motu:   { min: 650, max: 850,  label: 'suo motu review' },
+  contested:  { min: 1200, max: 1700, label: 'contested appeal' },
+};
 
 export function checkWordCount(
   orderText: string,
@@ -213,11 +232,8 @@ export function checkWordCount(
   const normalized = normalizeNFKC(orderText);
   const wordCount = normalized.split(/\s+/).filter(Boolean).length;
 
-  // Smart thresholds: short cases (withdrawal/memo dismissal) vs contested appeals
-  const isShortCase = detectShortCase(inputText) || detectShortCase(orderText);
-  const minWords = isShortCase ? 350 : 550;
-  const maxWords = isShortCase ? 550 : 850;
-  const caseLabel = isShortCase ? 'withdrawal/memo' : 'contested appeal';
+  const category = detectCaseCategory(inputText, orderText);
+  const { min: minWords, max: maxWords, label: caseLabel } = WORD_COUNT_TARGETS[category];
 
   const passed = wordCount >= minWords;  // Only enforce minimum (no upper-limit failure)
 

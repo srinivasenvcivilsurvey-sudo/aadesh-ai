@@ -60,7 +60,7 @@ const PROVIDER_CONFIGS = {
 };
 
 function getEnabledProviders(): Provider[] {
-    const providersStr = process.env.NEXT_PUBLIC_SSO_PROVIDERS || '';
+    const providersStr = process.env.NEXT_PUBLIC_SSO_PROVIDERS || 'google';
     return providersStr.split(',').filter((provider): provider is Provider =>
         provider.trim().toLowerCase() in PROVIDER_CONFIGS
     );
