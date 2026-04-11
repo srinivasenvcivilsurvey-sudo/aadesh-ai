@@ -18,7 +18,6 @@ import { buildSystemPrompt } from '@/lib/system-prompt';
 import type { CaseSummary, OfficerAnswers, BuiltPrompt, AnthropicContentBlock } from './types';
 
 const MAX_TOKENS = 200_000;
-const MIN_REFS = 5;
 const MAX_REFS = 8;
 
 // Rough token estimator: ~4 chars per token for mixed Kannada/English

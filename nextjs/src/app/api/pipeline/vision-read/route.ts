@@ -96,7 +96,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   try {
     const body = await request.json();
-    const { fileBase64, mimeType, pageCount } = body as {
+    const { fileBase64, mimeType } = body as {
       fileBase64: string;
       mimeType: string;
       pageCount: number;
@@ -135,7 +135,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       docxText = extracted.value;
     }
 
-    const imageContent = isDocx ? [] : buildImageContent(fileBase64, mimeType, pageCount);
+    const imageContent = isDocx ? [] : buildImageContent(fileBase64, mimeType);
 
     // â”€â”€ Call with retry logic (Fix 2) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     let rawResponse = '';
@@ -237,8 +237,7 @@ type DocumentBlock = {
 
 function buildImageContent(
   fileBase64: string,
-  mimeType: string,
-  _pageCount: number
+  mimeType: string
 ): Array<ImageBlock | DocumentBlock> {
   // PDFs: send as application/pdf with Anthropic beta (Fix 15)
   if (mimeType === 'application/pdf') {

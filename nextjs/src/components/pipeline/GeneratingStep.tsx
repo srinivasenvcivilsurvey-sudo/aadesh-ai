@@ -132,7 +132,7 @@ export function GeneratingStep({ dispatch, locale, state, userId, onComplete }: 
                 }
                 return;
               }
-            } catch (parseErr) {
+            } catch {
               // Skip malformed SSE data lines
             }
           } else if (line === '') {
