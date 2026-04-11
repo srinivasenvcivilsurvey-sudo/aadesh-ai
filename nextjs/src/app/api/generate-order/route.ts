@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateOrderSmart, DEFAULT_SYSTEM_PROMPT, normalizeNFKC } from '@/lib/sarvam';
 import { runGuardrails } from '@/lib/guardrails';
 import { createClient } from '@supabase/supabase-js';
-import { checkRateLimit } from '@/lib/rateLimit';
+// Single rate limiter for entire app. Old src/lib/rateLimit.ts deleted Apr 11, 2026 (D-9.42).
+import { checkDailyLimit, formatResetTime } from '@/lib/pipeline/rateLimiter';
 import { getSmartContext, buildContextBlock } from '@/lib/smart-context';
+import { redactPII, reInjectPII } from '@/lib/pipeline/piiRedactor';
 
 const MAX_INPUT_LENGTH = 10_000; // characters
 
@@ -25,14 +27,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // ── RATE LIMIT ───────────────────────────────────────
-    const rateCheck = checkRateLimit(user.id);
-    if (!rateCheck.allowed) {
-      return NextResponse.json(
-        { error: 'ದಯವಿಟ್ಟು ಸ್ವಲ್ಪ ಸಮಯದ ನಂತರ ಪ್ರಯತ್ನಿಸಿ (rate limit)' },
-        { status: 429 }
-      );
-    }
+    // Rate limit check moved to after adminClient is created (checkDailyLimit needs it)
 
     // ── PARSE & VALIDATE INPUT ───────────────────────────
     const body = await request.json();
@@ -76,8 +71,10 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
-    // OpenRouter key for contested appeals (Sonnet 4.6)
+    // AI keys for contested appeals (Sonnet 4.6)
+    // P-0.46: Anthropic direct SDK is primary; OpenRouter is fallback
     const openRouterKey = process.env.OPENROUTER_API_KEY || undefined;
+    const anthropicKey = process.env.ANTHROPIC_API_KEY || undefined;
 
     // ── CHECK CREDITS ────────────────────────────────────
     // Use service role client for DB operations (bypasses RLS)
@@ -107,6 +104,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // ── DAILY RATE LIMIT (D-9.42: 5 orders/day, Supabase-backed) ────────────
+    const rateCheck = await checkDailyLimit(user.id, adminClient);
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        {
+          error: `ದೈನಂದಿನ ಮಿತಿ ತಲುಪಿದೆ (${rateCheck.ordersToday}/5). ${formatResetTime(rateCheck.resetAt)} ನಂತರ ಪ್ರಯತ್ನಿಸಿ.`,
+          ordersToday: rateCheck.ordersToday,
+          resetAt: rateCheck.resetAt,
+        },
+        { status: 429 }
+      );
+    }
+
     // ── SMART-CONTEXT: fetch best reference orders ───────
     const normalizedCaseDetails = normalizeNFKC(caseDetails);
 
@@ -118,23 +128,46 @@ export async function POST(request: NextRequest) {
       ? `\nಸಂಬಂಧಿತ ಹಿಂದಿನ ಪ್ರಕರಣ: ${normalizeNFKC(previousCases.trim())} — ಇದನ್ನು ಆದೇಶದಲ್ಲಿ ಉಲ್ಲೇಖಿಸಿ.\n`
       : '';
 
-    // Combine context + previous cases + user input
-    const enrichedInput = contextBlock + prevCasesBlock + normalizedCaseDetails;
+    // ── PII REDACTION (DPDP compliance) ──────────────────
+    // Mask citizen names, survey numbers, village names before sending to Anthropic.
+    // The map stays in server memory only for the duration of this request.
+    const { redacted: redactedCaseDetails, map: piiMap } = redactPII(normalizedCaseDetails);
+    const { redacted: redactedPrevCases } = prevCasesBlock
+      ? redactPII(prevCasesBlock)
+      : { redacted: '' };
+
+    // Combine context + previous cases + REDACTED user input (used by Sarvam path)
+    const enrichedInput = contextBlock + redactedPrevCases + redactedCaseDetails;
 
     // ── GENERATE ORDER (smart routing) ──────────────────
-    // contested → Claude Sonnet 4.6 via OpenRouter (₹12, 96/100, 1200+ words)
+    // contested → Claude Sonnet 4.6 via Direct Anthropic SDK (P-0.46: adaptive thinking + caching)
+    //             Falls back to OpenRouter if ANTHROPIC_API_KEY missing
     // withdrawal / suo_motu → Sarvam 105B (FREE, fast)
+    //
+    // P-0.46 caching split: contextBlock (reference orders) is passed separately
+    // so Anthropic SDK can cache it independently from the per-order caseInput.
     const startTime = Date.now();
     const result = await generateOrderSmart(
       {
         orderType,
-        caseDetails: enrichedInput,
+        caseDetails: enrichedInput,                               // Sarvam path: full merged + redacted
         systemPrompt: DEFAULT_SYSTEM_PROMPT,
+        referenceOrdersBlock: contextBlock,                       // Anthropic path: cached separately
+        caseInputOnly: redactedPrevCases + redactedCaseDetails,   // Anthropic path: redacted, not cached
       },
       sarvamKey,
-      openRouterKey
+      openRouterKey,
+      anthropicKey
     );
     const generationTime = ((Date.now() - startTime) / 1000).toFixed(1);
+
+    // ── PII RE-INJECTION ────────────────────────────────
+    // Replace [NAME_1], [SURVEY_2], [VILLAGE_3] placeholders with real values
+    // before any downstream processing (date replacement, guardrails, DB save).
+    const { result: rehydrated, anomalies: piiAnomalies } = reInjectPII(result.content, piiMap);
+    if (piiAnomalies.length > 0) {
+      console.warn('PII rehydration anomalies (unknown placeholders in AI output):', piiAnomalies);
+    }
 
     // ── DATE PLACEHOLDER REPLACEMENT ────────────────────
     // Replace [DD-MM-YYYY] in FIXED TEXT 2 and FIXED TEXT 4 with the final hearing date
@@ -143,7 +176,7 @@ export async function POST(request: NextRequest) {
     const orderDate = extractedDate
       ? `${extractedDate[1]}-${extractedDate[2]}-${extractedDate[3]}`
       : '[___]';
-    const processedContent = result.content.replace(/\[DD-MM-YYYY\]/g, orderDate);
+    const processedContent = rehydrated.replace(/\[DD-MM-YYYY\]/g, orderDate);
 
     // ── PLACEHOLDER CHECK ────────────────────────────────
     // Reject output if AI returned unfilled template brackets like [NAME], [DATE]
