@@ -280,7 +280,7 @@ interface ParsedVisionResponse {
  * Property 5: Case summary always contains all required fields.
  * Property 6: Vision_Reader always returns 4 to 5 questions.
  */
-export function parseCaseSummary(rawResponse: string): ParsedVisionResponse {
+function parseCaseSummary(rawResponse: string): ParsedVisionResponse {
   // Extract JSON from response (Claude sometimes wraps in markdown)
   const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
