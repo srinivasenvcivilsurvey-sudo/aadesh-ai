@@ -1,0 +1,467 @@
+/**
+ * POST /api/pipeline/generate
+ * Generates a Sarakari Kannada order draft using Claude Sonnet with SSE streaming.
+ * SSE event types: 'chunk' | 'done' | 'error' | 'correction'
+ */
+
+import { NextRequest } from 'next/server';
+import Anthropic from '@anthropic-ai/sdk';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { buildPrompt, type OfficerProfile, type ReferenceOrder } from '@/lib/pipeline/buildPrompt';
+import { auditOrder, buildCorrectionInstruction } from '@/lib/pipeline/auditOrder';
+import { withRetry, isRateLimit } from '@/lib/pipeline/withRetry';
+import { logCacheMetrics } from '@/lib/pipeline/logCacheMetrics';
+import { sarvamGenerate, SARVAM_MODEL_ID } from '@/lib/pipeline/sarvamGenerate';
+import { redactPII, reInjectPII } from '@/lib/pipeline/piiRedactor';
+import { checkDailyLimit, formatResetTime } from '@/lib/pipeline/rateLimiter';
+import { logError, logException } from '@/lib/pipeline/errorLogger';
+import { validateEnv } from '@/lib/validateEnv';
+import type { CaseSummary, OfficerAnswers } from '@/lib/pipeline/types';
+
+const GENERATION_MODEL = 'claude-sonnet-4-6';
+const PROMPT_VERSION = 'V3.2.1';
+const MAX_TOKENS = 8192;
+const GENERATION_TIMEOUT_MS = 120_000;
+const SIMPLE_CASE_TYPES = ['withdrawal', 'suo_motu'];
+const VALID_CASE_TYPES = ['contested_appeal', 'withdrawal', 'suo_motu', 'appeal', 'contested'];
+
+export async function POST(request: NextRequest): Promise<Response> {
+  // ── Auth: validate Bearer token (IDOR fix — use token identity, not body.userId) ──
+  const authHeader = request.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return new Response(
+      `event: error\ndata: ${JSON.stringify({ message: 'Unauthorized' })}\n\n`,
+      { status: 401, headers: { 'Content-Type': 'text/event-stream' } }
+    );
+  }
+  const token = authHeader.split(' ')[1];
+  const anonClient = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+  const { data: { user: authUser }, error: authError } = await anonClient.auth.getUser(token);
+  if (authError || !authUser) {
+    return new Response(
+      `event: error\ndata: ${JSON.stringify({ message: 'Unauthorized' })}\n\n`,
+      { status: 401, headers: { 'Content-Type': 'text/event-stream' } }
+    );
+  }
+  const authenticatedUserId = authUser.id;
+
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      function send(event: string, data: unknown) {
+        controller.enqueue(
+          encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+        );
+      }
+
+      let creditDeducted = false;
+      let resolvedUserId = '';
+
+      try {
+        validateEnv();
+
+        const body = await request.json();
+        const { caseType, caseSummary, officerAnswers, sessionOrderCount = 1 } = body as {
+          caseType: string;
+          caseSummary: CaseSummary;
+          officerAnswers: OfficerAnswers;
+          sessionOrderCount?: number;
+        };
+
+        resolvedUserId = authenticatedUserId;
+        const userId = authenticatedUserId;
+
+        if (!caseType || !caseSummary || !officerAnswers) {
+          send('error', { message: 'ಅಗತ್ಯ ಮಾಹಿತಿ ಕಾಣೆಯಾಗಿದೆ / Required fields missing' });
+          controller.close();
+          return;
+        }
+
+        if (!VALID_CASE_TYPES.includes(caseType)) {
+          send('error', { message: 'ಅಮಾನ್ಯ ಪ್ರಕರಣ ಪ್ರಕಾರ / Invalid case type' });
+          controller.close();
+          return;
+        }
+
+        const anthropicKey = process.env.ANTHROPIC_API_KEY;
+        const sarvamKey = process.env.SARVAM_API_KEY;
+
+        if (!anthropicKey && !sarvamKey) {
+          send('error', { message: 'ಸರ್ವರ್ ಕಾನ್ಫಿಗರೇಶನ್ ದೋಷ / Server configuration error' });
+          controller.close();
+          return;
+        }
+
+        const adminClient = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY!
+        );
+
+        // ── Rate limit check ──────────────────────────────────────────────────
+        const rateLimit = await checkDailyLimit(userId, adminClient);
+        if (!rateLimit.allowed) {
+          const resetTime = formatResetTime(rateLimit.resetAt);
+          send('error', {
+            message: `ಇಂದು ಗರಿಷ್ಠ 5 ಆದೇಶಗಳ ಮಿತಿ ತಲುಪಿದೆ. ${resetTime} ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ. / Daily limit of 5 orders reached. Try again after ${resetTime}.`,
+            code: 'RATE_LIMIT_DAILY',
+            ordersToday: rateLimit.ordersToday,
+            resetAt: rateLimit.resetAt,
+          });
+          controller.close();
+          return;
+        }
+
+        // ── Load profile ──────────────────────────────────────────────────────
+        const { data: profile, error: profileError } = await adminClient
+          .from('profiles')
+          .select('credits_remaining, officer_name, designation, district, salutation, full_name')
+          .eq('id', userId)
+          .single();
+
+        if (profileError || !profile) {
+          await logError({
+            message: 'Could not load profile for generation',
+            route: '/api/pipeline/generate',
+            userId,
+            severity: 'ERROR',
+            metadata: { error: profileError?.message },
+          });
+          send('error', { message: 'ಪ್ರೊಫೈಲ್ ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ / Could not load profile' });
+          controller.close();
+          return;
+        }
+
+        if ((profile.credits_remaining ?? 0) < 1) {
+          send('error', {
+            message: 'ಕ್ರೆಡಿಟ್‌ಗಳು ಖಾಲಿಯಾಗಿವೆ. ದಯವಿಟ್ಟು ರೀಚಾರ್ಜ್ ಮಾಡಿ / No credits remaining. Please recharge.',
+            code: 'NO_CREDITS',
+          });
+          controller.close();
+          return;
+        }
+
+        // ── Atomic credit deduction BEFORE generation ─────────────────────────
+        const { data: updateResult, error: deductError } = await adminClient
+          .from('profiles')
+          .update({
+            credits_remaining: (profile.credits_remaining ?? 1) - 1,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', userId)
+          .gte('credits_remaining', 1)
+          .select('credits_remaining')
+          .single();
+
+        if (deductError || !updateResult) {
+          send('error', {
+            message: 'ಕ್ರೆಡಿಟ್‌ಗಳು ಖಾಲಿಯಾಗಿವೆ / No credits remaining',
+            code: 'NO_CREDITS',
+          });
+          controller.close();
+          return;
+        }
+        creditDeducted = true;
+
+        // ── Fetch reference orders ────────────────────────────────────────────
+        const { data: references } = await adminClient
+          .from('references')
+          .select('id, extracted_text, case_type_id, uploaded_at')
+          .eq('user_id', userId)
+          .eq('case_type_id', caseType)
+          .order('uploaded_at', { ascending: false })
+          .limit(8);
+
+        const officerProfile: OfficerProfile = {
+          officerName: profile.officer_name ?? profile.full_name ?? officerAnswers.officerName,
+          designation: profile.designation ?? 'ಕ.ಆ.ಸೇ',
+          district: profile.district ?? '',
+          salutation: profile.salutation ?? 'ಶ್ರೀ/ಶ್ರೀಮತಿ',
+        };
+
+        const isSimplePath = SIMPLE_CASE_TYPES.includes(caseType.toLowerCase());
+
+        // ── PII Redaction ─────────────────────────────────────────────────────
+        const caseContentText = JSON.stringify({ caseSummary, officerAnswers });
+        const { redacted: redactedContent, map: piiMap } = redactPII(caseContentText);
+
+        let redactedCaseSummary: CaseSummary = caseSummary;
+        let redactedAnswers: OfficerAnswers = officerAnswers;
+        try {
+          const parsed = JSON.parse(redactedContent) as { caseSummary: CaseSummary; officerAnswers: OfficerAnswers };
+          redactedCaseSummary = parsed.caseSummary;
+          redactedAnswers = parsed.officerAnswers;
+        } catch {
+          await logError({
+            message: 'PII redaction JSON parse failed — using original content',
+            route: '/api/pipeline/generate',
+            userId,
+            severity: 'WARNING',
+          });
+        }
+
+        // ── Generate ──────────────────────────────────────────────────────────
+        let generatedText = '';
+        let cachedTokens = 0;
+        let inputTokens = 0;
+        let outputTokens = 0;
+        let modelUsed = GENERATION_MODEL;
+
+        if (isSimplePath && sarvamKey) {
+          // Simplified path: Sarvam 105B (free, no PII redaction needed)
+          const sarvamResult = await sarvamGenerate(
+            caseSummary, officerAnswers, officerProfile, sarvamKey
+          );
+          generatedText = sarvamResult.content;
+          modelUsed = SARVAM_MODEL_ID;
+          send('chunk', { text: generatedText });
+        } else if (anthropicKey) {
+          // Full path: Claude Sonnet with SSE + prompt caching + 120s timeout
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Generation timeout after 120 seconds')), GENERATION_TIMEOUT_MS)
+          );
+          const result = await Promise.race([
+            generateWithClaude(anthropicKey, officerProfile, references ?? [], redactedCaseSummary, redactedAnswers, send),
+            timeoutPromise,
+          ]);
+
+          const { result: reinjected, anomalies } = reInjectPII(result.text, piiMap);
+          generatedText = reinjected;
+          cachedTokens = result.cachedTokens;
+          inputTokens = result.inputTokens;
+          outputTokens = result.outputTokens;
+
+          if (anomalies.length > 0) {
+            await logError({
+              message: `PII re-injection anomaly: ${anomalies.length} unmatched placeholder(s): ${anomalies.join(', ')}`,
+              route: '/api/pipeline/generate',
+              userId,
+              severity: 'WARNING',
+              metadata: { anomalies },
+            });
+            // Append visible warning for officer
+            generatedText += [
+              '',
+              '---',
+              '⚠️ ಗಮನಿಸಿ / NOTE: The following placeholders need manual replacement:',
+              anomalies.join(', '),
+              '---',
+            ].join('\n');
+          }
+        } else {
+          send('error', { message: 'AI ಸೇವೆ ಲಭ್ಯವಿಲ್ಲ / AI service unavailable' });
+          controller.close();
+          return;
+        }
+
+        if (!generatedText.trim()) {
+          send('error', { message: 'ಆದೇಶ ರಚನೆ ವಿಫಲವಾಯಿತು. ದಯವಿಟ್ಟು ಮತ್ತೊಮ್ಮೆ ಪ್ರಯತ್ನಿಸಿ / Generation failed. Please retry.' });
+          controller.close();
+          return;
+        }
+
+        // ── Self-audit ────────────────────────────────────────────────────────
+        let auditResult = await auditOrder(generatedText, caseSummary, caseType);
+
+        if (auditResult.failures.length > 0 && anthropicKey && !isSimplePath) {
+          const correctionInstruction = buildCorrectionInstruction(auditResult);
+          const correctedResult = await regenerateWithCorrection(
+            anthropicKey, officerProfile, references ?? [],
+            redactedCaseSummary, redactedAnswers, correctionInstruction
+          );
+          if (correctedResult) {
+            const { result: reinjectedCorrection, anomalies: correctionAnomalies } = reInjectPII(correctedResult, piiMap);
+            if (correctionAnomalies.length > 0) {
+              await logError({
+                message: `PII re-injection anomaly in correction: ${correctionAnomalies.join(', ')}`,
+                route: '/api/pipeline/generate',
+                userId,
+                severity: 'WARNING',
+                metadata: { anomalies: correctionAnomalies },
+              });
+            }
+            generatedText = reinjectedCorrection;
+            auditResult = await auditOrder(generatedText, caseSummary, caseType);
+            send('correction', { text: generatedText });
+          }
+        }
+
+        // ── Log cache metrics ─────────────────────────────────────────────────
+        logCacheMetrics(userId, cachedTokens, sessionOrderCount);
+
+        // ── Done ──────────────────────────────────────────────────────────────
+        send('done', {
+          guardrailScore: auditResult.score,
+          cachedTokens,
+          modelUsed,
+          creditsRemaining: updateResult.credits_remaining,
+          promptVersion: PROMPT_VERSION,
+          inputTokens: inputTokens || null,
+          outputTokens: outputTokens || null,
+        });
+
+        controller.close();
+      } catch (err) {
+        // Credit auto-refund on any error after deduction
+        if (creditDeducted && resolvedUserId) {
+          await refundCredit(resolvedUserId, createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.SUPABASE_SERVICE_ROLE_KEY!
+          ));
+        }
+
+        await logException(err, {
+          route: '/api/pipeline/generate',
+          userId: resolvedUserId || undefined,
+        });
+
+        const message = isRateLimit(err)
+          ? 'ದಯವಿಟ್ಟು 30 ಸೆಕೆಂಡ್ ನಿರೀಕ್ಷಿಸಿ / Please wait 30 seconds and try again.'
+          : err instanceof Error && err.message.includes('timeout')
+            ? 'ಆದೇಶ ರಚನೆ ಸಮಯ ಮೀರಿತು. ದಯವಿಟ್ಟು ಮತ್ತೊಮ್ಮೆ ಪ್ರಯತ್ನಿಸಿ / Generation timed out. Please retry.'
+            : 'ಆದೇಶ ರಚನೆ ವಿಫಲವಾಯಿತು. ದಯವಿಟ್ಟು ಮತ್ತೊಮ್ಮೆ ಪ್ರಯತ್ನಿಸಿ / Generation failed. Please retry.';
+        try {
+          controller.enqueue(
+            encoder.encode(`event: error\ndata: ${JSON.stringify({ message })}\n\n`)
+          );
+        } catch { /* stream may already be closed */ }
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    },
+  });
+}
+
+// ── Credit refund ─────────────────────────────────────────────────────────────
+
+async function refundCredit(userId: string, adminClient: SupabaseClient): Promise<void> {
+  try {
+    const { error } = await adminClient.rpc('increment_credits', {
+      user_uuid: userId,
+      amount: 1,
+    });
+
+    if (error) {
+      const { data: p } = await adminClient
+        .from('profiles')
+        .select('credits_remaining')
+        .eq('id', userId)
+        .single();
+      if (p) {
+        await adminClient
+          .from('profiles')
+          .update({ credits_remaining: (p.credits_remaining ?? 0) + 1 })
+          .eq('id', userId);
+      }
+    }
+
+    await logError({
+      message: `Credit refunded for user ${userId} due to generation failure`,
+      route: '/api/pipeline/generate',
+      userId,
+      severity: 'INFO',
+    });
+  } catch (refundErr) {
+    await logError({
+      message: `CRITICAL: Credit refund FAILED for user ${userId}. Manual resolution required.`,
+      stack: refundErr instanceof Error ? refundErr.stack : undefined,
+      route: '/api/pipeline/generate',
+      userId,
+      severity: 'ERROR',
+      metadata: { refundFailed: true },
+    });
+  }
+}
+
+// ── Claude generation with SSE streaming ─────────────────────────────────────
+
+async function generateWithClaude(
+  apiKey: string,
+  profile: OfficerProfile,
+  references: ReferenceOrder[],
+  caseSummary: CaseSummary,
+  answers: OfficerAnswers,
+  send: (event: string, data: unknown) => void
+): Promise<{ text: string; cachedTokens: number; inputTokens: number; outputTokens: number }> {
+  const client = new Anthropic({ apiKey });
+  const { messages } = buildPrompt(profile, references, caseSummary, answers);
+
+  let fullText = '';
+  let cachedTokens = 0;
+  let inputTokens = 0;
+  let outputTokens = 0;
+
+  // Bug 13 fix: use 30s delay to match the 30-second countdown shown in GeneratingStep UI
+  await withRetry(async () => {
+    fullText = '';
+
+    const stream = await client.messages.stream({
+      model: GENERATION_MODEL,
+      max_tokens: MAX_TOKENS,
+      messages: messages as Parameters<typeof client.messages.stream>[0]['messages'],
+    });
+
+    for await (const chunk of stream) {
+      if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
+        fullText += chunk.delta.text;
+        send('chunk', { text: chunk.delta.text });
+      }
+    }
+
+    const finalMessage = await stream.finalMessage();
+    const usage = finalMessage.usage as {
+      cache_read_input_tokens?: number;
+      input_tokens?: number;
+      output_tokens?: number;
+    };
+    cachedTokens = usage.cache_read_input_tokens ?? 0;
+    inputTokens = usage.input_tokens ?? 0;
+    outputTokens = usage.output_tokens ?? 0;
+  }, 3, 30_000); // 30s delay matches UI countdown
+
+  return { text: fullText, cachedTokens, inputTokens, outputTokens };
+}
+
+// ── Regeneration with correction (no streaming) ───────────────────────────────
+
+async function regenerateWithCorrection(
+  apiKey: string,
+  profile: OfficerProfile,
+  references: ReferenceOrder[],
+  caseSummary: CaseSummary,
+  answers: OfficerAnswers,
+  correctionInstruction: string
+): Promise<string | null> {
+  try {
+    const client = new Anthropic({ apiKey });
+    const { messages } = buildPrompt(profile, references, caseSummary, answers);
+
+    const lastMessage = messages[messages.length - 1];
+    const lastContent = lastMessage.content[lastMessage.content.length - 1];
+    lastContent.text += correctionInstruction;
+
+    const response = await client.messages.create({
+      model: GENERATION_MODEL,
+      max_tokens: MAX_TOKENS,
+      messages: messages as Parameters<typeof client.messages.create>[0]['messages'],
+    });
+
+    return response.content
+      .filter(b => b.type === 'text')
+      .map(b => (b as { type: 'text'; text: string }).text)
+      .join('');
+  } catch (err) {
+    await logException(err, { route: '/api/pipeline/generate (correction)' });
+    return null;
+  }
+}
