@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useGlobal } from '@/lib/context/GlobalContext';
 import { useLanguage } from '@/lib/context/LanguageContext';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { CalendarDays, FileText, CreditCard, Brain, ArrowRight, Gift, Sparkles } from 'lucide-react';
+import { CalendarDays, FileText, CreditCard, Brain, ArrowRight, Gift, Sparkles, Zap } from 'lucide-react';
 import { createSPASassClientAuthenticated as createSPASassClient } from '@/lib/supabase/client';
 import { FileObject } from '@supabase/storage-js';
 import strings, { t } from '@/lib/i18n';
@@ -198,6 +198,24 @@ export default function DashboardContent() {
                 </CardHeader>
                 <CardContent>
                     <div className="grid gap-4 md:grid-cols-3">
+                        {/* New Pipeline CTA — primary action */}
+                        <Link
+                            href="/app/pipeline"
+                            className="flex items-center gap-3 p-4 border-2 rounded-lg hover:bg-primary-50 transition-colors border-primary-500 bg-primary-50 md:col-span-3"
+                        >
+                            <div className="p-2 bg-primary-600 rounded-full">
+                                <Zap className="h-5 w-5 text-white" />
+                            </div>
+                            <div>
+                                <h3 className="font-semibold text-primary-700" style={{ fontFamily: "'Noto Sans Kannada', system-ui, sans-serif" }}>
+                                    {locale === 'kn' ? 'ಹೊಸ ಆದೇಶ ತಯಾರಿಸಿ →' : 'Generate New Order (PDF Upload) →'}
+                                </h3>
+                                <p className="text-xs text-primary-600 mt-0.5">
+                                    {locale === 'kn' ? 'PDF ಅಪ್\u200Cಲೋಡ್ → AI ಓದುವಿಕೆ → ಆದೇಶ → ಡೌನ್\u200Cಲೋಡ್' : 'Upload PDF → AI reads → Generate order → Download .docx'}
+                                </p>
+                            </div>
+                        </Link>
+
                         <Link
                             href="/app/generate"
                             className="flex items-center gap-3 p-4 border rounded-lg hover:bg-primary-50 transition-colors border-primary-200"
