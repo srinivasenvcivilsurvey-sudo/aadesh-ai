@@ -1,0 +1,44 @@
+name: Supabase Keepalive + Uptime
+
+# Pings https://aadesh-ai.in/api/health every 6 hours to:
+#   1. Prevent Supabase free-tier auto-pause (triggers at 7 days of inactivity)
+#   2. Detect downtime — a failed job sends a GitHub email notification
+#
+# History: On 2026-04-11 the Supabase project auto-paused, causing a multi-hour
+# OAuth outage. This workflow prevents recurrence.
+
+on:
+  schedule:
+    # Every 6 hours at minute 0 (00:00, 06:00, 12:00, 18:00 UTC)
+    - cron: '0 */6 * * *'
+  workflow_dispatch:  # allow manual trigger from the Actions tab
+
+concurrency:
+  group: keepalive
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping /api/health
+        run: |
+          set -euo pipefail
+          URL="https://aadesh-ai.in/api/health"
+          echo "Pinging $URL at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+
+          # -f: fail on HTTP >=400, -s: silent, -S: still show errors,
+          # -L: follow redirects, -m 30: 30s total timeout
+          RESPONSE=$(curl -fsSL -m 30 -w '\nHTTP_STATUS:%{http_code}\nTOTAL_TIME:%{time_total}s\n' "$URL")
+
+          echo "$RESPONSE"
+
+          # Extract status for the run summary
+          STATUS=$(echo "$RESPONSE" | grep '^HTTP_STATUS:' | cut -d: -f2)
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::Expected HTTP 200, got $STATUS"
+            exit 1
+          fi
+
+          echo "::notice::Health check OK (HTTP $STATUS)"
