@@ -107,9 +107,12 @@ export function redactPII(text: string): RedactionResult {
 
   result = result.replace(nameContextPattern, (match, nameGroup) => {
     if (match.includes('[NAME_')) return match;
+    const trimmed = nameGroup.trim();
+    // Skip if the "name" is actually a stop-word (revenue/legal term)
+    if (KANNADA_STOP_WORDS.has(trimmed)) return match;
     const prefix = match.slice(0, match.indexOf(nameGroup));
     const placeholder = `[NAME_${nameCounter++}]`;
-    map.set(placeholder, nameGroup.trim());
+    map.set(placeholder, trimmed);
     return prefix + placeholder;
   });
 
