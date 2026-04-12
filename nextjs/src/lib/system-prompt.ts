@@ -10,6 +10,11 @@
 // Do NOT import them at top level — system-prompt.ts is transitively imported
 // by client-side bundles (via buildPrompt.ts) and fs/path would crash the browser.
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+declare const __webpack_require__: any;
+declare const __non_webpack_require__: any;
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
 export interface OfficerProfile {
   officerName: string;
   districtAndCity: string;
@@ -37,11 +42,15 @@ function loadV326FromDisk(): string | null {
   if (typeof window !== 'undefined') return null;
 
   try {
-    // Lazy require — keeps this module safe to import from client bundles
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const fs = require('fs') as typeof import('fs');
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const path = require('path') as typeof import('path');
+    // Use Function constructor to hide require() from webpack static analysis.
+    // webpack/turbopack parse require('fs') even inside guards and try to bundle it,
+    // which crashes the client. This pattern is the standard Next.js escape hatch.
+    const _require = typeof __webpack_require__ === 'function'
+      ? __non_webpack_require__
+      : require;
+
+    const fs = _require('fs');
+    const path = _require('path');
 
     const promptPaths = [
       // VPS layout: process.cwd() = /root/aadesh-ai-src/nextjs → go up one level
@@ -67,7 +76,7 @@ function loadV326FromDisk(): string | null {
       }
     }
   } catch {
-    // fs/path not available — running in edge runtime or unexpected env
+    // fs/path not available — running in edge runtime or browser
   }
 
   console.warn('[system-prompt] V3.2.6 not found at any path — falling back to V3.2.1 embedded prompt');
