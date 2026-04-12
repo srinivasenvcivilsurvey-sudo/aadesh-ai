@@ -18,7 +18,7 @@ import mammoth from 'mammoth';
 import type { ValidateResponse, AllowedFileType } from '@/lib/pipeline/types';
 
 const MAX_PAGES = 200;
-const TIMEOUT_MS = 5_000;
+const TIMEOUT_MS = 30_000;
 const MAX_BASE64_SIZE = 67_000_000; // ~50 MB file
 
 const ALLOWED_MIME_TYPES: Record<string, AllowedFileType> = {
@@ -69,6 +69,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ValidateR
     return NextResponse.json(result);
   } catch (err) {
     const isTimeout = err instanceof Error && err.message === 'TIMEOUT';
+    console.error('[validate] Error:', isTimeout ? 'TIMEOUT' : err);
     return NextResponse.json(
       { valid: false, pageCount: 0, fileType: 'pdf', error: isTimeout ? BILINGUAL_ERRORS.timeout : BILINGUAL_ERRORS.parseError },
       { status: isTimeout ? 408 : 422 }

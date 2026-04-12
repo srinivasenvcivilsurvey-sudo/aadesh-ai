@@ -110,7 +110,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     // ── Upload file to Supabase Storage ──────────────────────────────────────
-    const filePath = `${user.id}/${Date.now()}_${file.name}`;
+    // Sanitize filename for Supabase: replace non-ASCII (Kannada etc.) with underscores
+    const safeFileName = file.name.replace(/[^\x20-\x7E]/g, '_').replace(/_+/g, '_');
+    const filePath = `${user.id}/${Date.now()}_${safeFileName}`;
     const { error: uploadError } = await adminClient.storage
       .from('references')
       .upload(filePath, buffer, {

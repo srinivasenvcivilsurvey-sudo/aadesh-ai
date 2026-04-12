@@ -26,6 +26,7 @@ export default function MyReferencesPage() {
   const [success, setSuccess] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [trainingProgress, setTrainingProgress] = useState(0);
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
   const [duplicateWarning, setDuplicateWarning] = useState('');
 
@@ -57,13 +58,39 @@ export default function MyReferencesPage() {
     }
   };
 
+  // Accuracy score based on file count (20 files = 100%)
+  const getAccuracyPercent = (count: number) => Math.min(100, Math.round((count / 20) * 100));
+
   const getStatusMessage = () => {
     const count = files.length;
-    if (count === 0) return { text: kn ? 'ಇನ್ನೂ ಯಾವ ಆದೇಶಗಳನ್ನೂ ಅಪ್\u200Cಲೋಡ್ ಮಾಡಿಲ್ಲ' : 'No orders uploaded yet', color: 'text-gray-500', bg: 'bg-gray-50' };
-    if (count < 5) return { text: kn ? `ಪ್ರಾರಂಭ — ಇನ್ನು ${5 - count} ಫೈಲ್\u200Cಗಳನ್ನು ಅಪ್\u200Cಲೋಡ್ ಮಾಡಿ` : `Getting started — upload at least ${5 - count} more`, color: 'text-amber-600', bg: 'bg-amber-50' };
-    if (count < 10) return { text: kn ? 'ಉತ್ತಮ — ಸುಮಾರು 85% ನಿಖರತೆ' : 'Good — approximately 85% accuracy', color: 'text-blue-600', bg: 'bg-blue-50' };
-    if (count < 20) return { text: kn ? 'ಬಲವಾದ — ಸುಮಾರು 90% ನಿಖರತೆ' : 'Strong — approximately 90% accuracy', color: 'text-green-600', bg: 'bg-green-50' };
-    return { text: kn ? 'ಅತ್ಯುತ್ತಮ — 95%+ ನಿಖರತೆ. AI ಸಿದ್ಧವಾಗಿದೆ.' : 'Excellent — 95%+ accuracy. AI is ready.', color: 'text-green-700', bg: 'bg-green-100' };
+    const accuracy = getAccuracyPercent(count);
+    const remaining = Math.max(0, 20 - count);
+
+    if (count === 0) return {
+      text: kn ? 'ಇನ್ನೂ ಯಾವ ಆದೇಶಗಳನ್ನೂ ಅಪ್\u200Cಲೋಡ್ ಮಾಡಿಲ್ಲ. ಕನಿಷ್ಠ 5 ಅಪ್\u200Cಲೋಡ್ ಮಾಡಿ.'
+            : 'No orders uploaded yet. Upload at least 5 to start training.',
+      accuracy, color: 'text-gray-500', bg: 'bg-gray-50',
+    };
+    if (count < 5) return {
+      text: kn ? `${accuracy}% — ಇನ್ನು ${5 - count} ಫೈಲ್\u200Cಗಳು ಅಪ್\u200Cಲೋಡ್ ಮಾಡಿ (ಕನಿಷ್ಠ 5 ಬೇಕು)`
+            : `${accuracy}% — Upload ${5 - count} more files (minimum 5 needed to start)`,
+      accuracy, color: 'text-red-600', bg: 'bg-red-50',
+    };
+    if (count < 10) return {
+      text: kn ? `${accuracy}% ನಿಖರತೆ — ಇನ್ನು ${remaining} ಫೈಲ್\u200Cಗಳು ಅಪ್\u200Cಲೋಡ್ ಮಾಡಿ 100% ತಲುಪಲು`
+            : `${accuracy}% accuracy — Upload ${remaining} more files to reach 100%`,
+      accuracy, color: 'text-amber-600', bg: 'bg-amber-50',
+    };
+    if (count < 20) return {
+      text: kn ? `${accuracy}% ನಿಖರತೆ — ಇನ್ನು ${remaining} ಫೈಲ್\u200Cಗಳು ಅಪ್\u200Cಲೋಡ್ ಮಾಡಿ 100% ತಲುಪಲು`
+            : `${accuracy}% accuracy — Upload ${remaining} more files to reach 100%`,
+      accuracy, color: 'text-blue-600', bg: 'bg-blue-50',
+    };
+    return {
+      text: kn ? '100% ನಿಖರತೆ! AI ನಿಮ್ಮ ಶೈಲಿ ಸಂಪೂರ್ಣವಾಗಿ ಕಲಿತಿದೆ.'
+            : '100% accuracy! AI has fully learned your writing style.',
+      accuracy: 100, color: 'text-green-700', bg: 'bg-green-100',
+    };
   };
 
   const handleFileUpload = async (file: File) => {
@@ -147,6 +174,16 @@ export default function MyReferencesPage() {
 
   const triggerPromptGeneration = async () => {
     setGenerating(true);
+    setTrainingProgress(0);
+
+    // Simulate progress: ramp up to 90% over ~30 seconds, then jump to 100% on completion
+    const progressTimer = setInterval(() => {
+      setTrainingProgress(prev => {
+        if (prev >= 90) { clearInterval(progressTimer); return 90; }
+        return prev + 3;
+      });
+    }, 1000);
+
     try {
       const token = await getAuthToken();
       if (!token) return;
@@ -159,15 +196,21 @@ export default function MyReferencesPage() {
         },
       });
 
+      clearInterval(progressTimer);
+      setTrainingProgress(100);
+
       setSuccess(kn
         ? 'AI ನಿಮ್ಮ ಶೈಲಿ ಕಲಿತಿದೆ!'
         : 'AI has learned your style!');
       setTimeout(() => setSuccess(''), 5000);
     } catch {
-      // Non-critical — prompt generation can be retried
+      clearInterval(progressTimer);
       console.error('Prompt generation failed');
     } finally {
-      setGenerating(false);
+      setTimeout(() => {
+        setGenerating(false);
+        setTrainingProgress(0);
+      }, 2000);
     }
   };
 
@@ -238,43 +281,67 @@ export default function MyReferencesPage() {
 
   return (
     <div className="space-y-6 p-6">
-      {/* Header with Status */}
+      {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
           <Brain className="h-7 w-7 text-primary-600" />
-          {kn ? 'ನನ್ನ ಉಲ್ಲೇಖ ಆದೇಶಗಳು' : 'My Reference Orders'}
+          {kn ? 'AI ತರಬೇತಿ' : 'Train AI'}
         </h1>
         <p className="mt-1 text-sm text-gray-500">
-          {files.length} {kn ? 'ಫೈಲ್\u200Cಗಳು ಅಪ್\u200Cಲೋಡ್ ಆಗಿವೆ' : 'files uploaded'}
+          {kn
+            ? 'ನಿಮ್ಮ ಅತ್ಯುತ್ತಮ ಅಂತಿಮ ಆದೇಶಗಳನ್ನು ಅಪ್\u200Cಲೋಡ್ ಮಾಡಿ — AI ನಿಮ್ಮ ಶೈಲಿ ಕಲಿಯುತ್ತದೆ'
+            : 'Upload your best finalized orders — AI will learn your writing style'}
         </p>
       </div>
 
-      {/* Status Banner */}
+      {/* AI Accuracy Status Banner */}
       <div className={`rounded-lg p-4 ${status.bg}`}>
-        <p className={`font-medium ${status.color}`}>{status.text}</p>
-        {files.length > 0 && files.length < 20 && (
-          <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
-            <div
-              className="bg-primary-600 h-2 rounded-full transition-all"
-              style={{ width: `${Math.min(100, (files.length / 20) * 100)}%` }}
-            />
-          </div>
-        )}
-        {files.length >= 20 && (
-          <p className="mt-1 text-sm text-green-600">
-            {kn ? 'AI ನಿಮ್ಮ ಶೈಲಿ ಕಲಿತಿದೆ ✓' : 'AI has learned your style ✓'}
-          </p>
-        )}
+        <div className="flex items-center justify-between mb-1">
+          <p className={`font-medium ${status.color}`}>{status.text}</p>
+          <span className={`text-lg font-bold ${status.color}`}>{status.accuracy}%</span>
+        </div>
+        <div className="mt-2 w-full bg-gray-200 rounded-full h-3">
+          <div
+            className={`h-3 rounded-full transition-all duration-500 ${
+              status.accuracy >= 100 ? 'bg-green-500' : status.accuracy >= 50 ? 'bg-blue-500' : status.accuracy >= 25 ? 'bg-amber-500' : 'bg-red-400'
+            }`}
+            style={{ width: `${status.accuracy}%` }}
+          />
+        </div>
+        <p className="mt-2 text-xs text-gray-500">
+          {files.length} / 20 {kn ? 'ಫೈಲ್\u200Cಗಳು ಅಪ್\u200Cಲೋಡ್ ಆಗಿವೆ' : 'files uploaded'}{' '}
+          {files.length >= 20
+            ? (kn ? '— ಸಂಪೂರ್ಣ!' : '— Complete!')
+            : (kn ? `— ಇನ್ನೂ ${20 - files.length} ಬೇಕು` : `— ${20 - files.length} more needed`)}
+        </p>
       </div>
 
-      {/* Generating indicator */}
+      {/* AI Training Progress (with percentage) */}
       {generating && (
-        <Alert>
-          <Loader2 className="h-4 w-4 animate-spin" />
-          <AlertDescription>
-            {kn ? 'AI ನಿಮ್ಮ ಆದೇಶಗಳನ್ನು ಅಧ್ಯಯನ ಮಾಡುತ್ತಿದೆ... (30-60 ಸೆಕೆಂಡ್)' : 'AI is studying your orders... (30-60 seconds)'}
-          </AlertDescription>
-        </Alert>
+        <div className="rounded-lg border border-purple-300 bg-purple-50 p-4">
+          <div className="flex items-center gap-3 mb-2">
+            <Loader2 className="h-5 w-5 animate-spin text-purple-600" />
+            <span className="font-medium text-purple-800">
+              {kn ? 'AI ನಿಮ್ಮ ಆದೇಶಗಳನ್ನು ಅಧ್ಯಯನ ಮಾಡುತ್ತಿದೆ...' : 'AI is learning your style...'}
+            </span>
+            <span className="ml-auto text-lg font-bold text-purple-700">{trainingProgress}%</span>
+          </div>
+          <div className="w-full bg-purple-200 rounded-full h-2.5">
+            <div
+              className="bg-purple-600 h-2.5 rounded-full transition-all duration-1000"
+              style={{ width: `${trainingProgress}%` }}
+            />
+          </div>
+          <p className="mt-2 text-xs text-purple-600">
+            {trainingProgress < 30
+              ? (kn ? 'ಆದೇಶಗಳನ್ನು ಓದುತ್ತಿದೆ...' : 'Reading your orders...')
+              : trainingProgress < 70
+                ? (kn ? 'ಶೈಲಿ ವಿಶ್ಲೇಷಿಸುತ್ತಿದೆ...' : 'Analyzing your writing style...')
+                : trainingProgress < 100
+                  ? (kn ? 'AI ಮಾದರಿ ನಿರ್ಮಿಸುತ್ತಿದೆ...' : 'Building AI model...')
+                  : (kn ? 'ಮುಗಿದಿದೆ!' : 'Complete!')}
+          </p>
+        </div>
       )}
 
       {duplicateWarning && (
@@ -390,13 +457,13 @@ export default function MyReferencesPage() {
                   key={file.id}
                   className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-gray-50"
                 >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="text-xs text-gray-400 w-5">{idx + 1}</span>
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <span className="text-xs text-gray-400 w-5 shrink-0">{idx + 1}</span>
                     <FileIcon className="h-4 w-4 text-gray-400 shrink-0" />
-                    <span className="text-sm truncate max-w-[200px]">{file.file_name}</span>
+                    <span className="text-sm break-all" title={file.file_name}>{file.file_name}</span>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-gray-400">
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="text-xs text-gray-400 whitespace-nowrap">
                       {new Date(file.uploaded_at).toLocaleDateString(kn ? 'kn-IN' : 'en-IN', {
                         month: 'short', day: 'numeric',
                       })}

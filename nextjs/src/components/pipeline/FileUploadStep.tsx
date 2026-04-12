@@ -46,6 +46,7 @@ export function FileUploadStep({ dispatch, locale }: FileUploadStepProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [consentGiven, setConsentGiven] = useState(false);
   const [selectedCaseType, setSelectedCaseType] = useState<string>('');
+  const [isDragging, setIsDragging] = useState(false);
 
   const kn = locale === 'kn';
   const isSimple = SIMPLE_CASE_TYPES.includes(selectedCaseType);
@@ -67,11 +68,8 @@ export function FileUploadStep({ dispatch, locale }: FileUploadStepProps) {
     });
   }
 
-  // ── Full path: file upload + Vision reading ───────────────────────────────
-  async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  // ── Shared file processing logic ───────────────────────────────────────────
+  async function processFile(file: File) {
     setError('');
 
     if (file.size > MAX_FILE_SIZE_BYTES) {
@@ -133,6 +131,36 @@ export function FileUploadStep({ dispatch, locale }: FileUploadStepProps) {
     } finally {
       setLoading(false);
     }
+  }
+
+  // ── Full path: file upload via click ──────────────────────────────────────
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    processFile(file);
+  }
+
+  // ── Drag-and-drop handlers ────────────────────────────────────────────────
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const file = e.dataTransfer.files?.[0];
+    if (!file || loading) return;
+    processFile(file);
   }
 
   return (
@@ -219,16 +247,26 @@ export function FileUploadStep({ dispatch, locale }: FileUploadStepProps) {
           <>
             <div
               onClick={() => !loading && fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
+              onDragOver={handleDragOver}
+              onDragEnter={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${
                 loading
                   ? 'border-primary-300 bg-primary-50 cursor-wait'
-                  : 'border-gray-300 hover:border-primary-400 cursor-pointer'
+                  : isDragging
+                    ? 'border-primary-500 bg-primary-50 scale-[1.01]'
+                    : 'border-gray-300 hover:border-primary-400 cursor-pointer'
               }`}
             >
-              <Upload className={`h-10 w-10 mx-auto mb-3 ${loading ? 'text-primary-400 animate-pulse' : 'text-gray-400'}`} />
+              <Upload className={`h-10 w-10 mx-auto mb-3 ${loading ? 'text-primary-400 animate-pulse' : isDragging ? 'text-primary-500' : 'text-gray-400'}`} />
               {loading ? (
                 <p className="text-sm text-primary-600 font-medium">
                   {kn ? 'ಪರಿಶೀಲಿಸಲಾಗುತ್ತಿದೆ...' : 'Validating...'}
+                </p>
+              ) : isDragging ? (
+                <p className="text-sm font-medium text-primary-600">
+                  {kn ? 'ಇಲ್ಲಿ ಬಿಡಿ' : 'Drop file here'}
                 </p>
               ) : selectedFile ? (
                 <div>
@@ -240,7 +278,7 @@ export function FileUploadStep({ dispatch, locale }: FileUploadStepProps) {
               ) : (
                 <div>
                   <p className="text-sm font-medium text-gray-700">
-                    {kn ? 'ಪ್ರಕರಣ ಫೈಲ್ ಅಪ್\u200Cಲೋಡ್ ಮಾಡಿ' : 'Upload Case File'}
+                    {kn ? 'ಫೈಲ್ ಎಳೆದು ಬಿಡಿ ಅಥವಾ ಕ್ಲಿಕ್ ಮಾಡಿ' : 'Drag & drop file or click to select'}
                   </p>
                   <p className="text-xs text-gray-400 mt-1">
                     {kn ? 'PDF, DOCX, JPG, PNG — ಗರಿಷ್ಠ 200 ಪುಟಗಳು' : 'PDF, DOCX, JPG, PNG — max 200 pages'}
