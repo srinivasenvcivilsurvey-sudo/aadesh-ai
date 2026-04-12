@@ -27,6 +27,7 @@ export default function MyReferencesPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
+  const [duplicateWarning, setDuplicateWarning] = useState('');
 
   const kn = locale === 'kn';
 
@@ -189,18 +190,49 @@ export default function MyReferencesPage() {
     }
   };
 
+  // ── Duplicate detection: filter out already-uploaded file names ─────────
+  const uploadBatch = useCallback((incoming: File[]) => {
+    setDuplicateWarning('');
+    const existingNames = new Set(files.map(f => f.file_name.toLowerCase()));
+    const seenInBatch = new Set<string>();
+    const toUpload: File[] = [];
+    const duplicates: string[] = [];
+
+    for (const file of incoming) {
+      const nameLower = file.name.toLowerCase();
+      if (existingNames.has(nameLower) || seenInBatch.has(nameLower)) {
+        duplicates.push(file.name);
+      } else {
+        seenInBatch.add(nameLower);
+        toUpload.push(file);
+      }
+    }
+
+    if (duplicates.length > 0) {
+      const names = duplicates.join(', ');
+      setDuplicateWarning(
+        kn
+          ? `ಈ ಫೈಲ್\u200Cಗಳು ಈಗಾಗಲೇ ಅಪ್\u200Cಲೋಡ್ ಆಗಿವೆ (ಬಿಟ್ಟಿದೆ): ${names}`
+          : `Already uploaded (skipped): ${names}`
+      );
+      setTimeout(() => setDuplicateWarning(''), 8000);
+    }
+
+    toUpload.forEach(f => handleFileUpload(f));
+  }, [files, kn]);
+
   const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const fileList = event.target.files;
     if (!fileList) return;
-    Array.from(fileList).forEach(f => handleFileUpload(f));
+    uploadBatch(Array.from(fileList));
     event.target.value = '';
   };
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    Array.from(e.dataTransfer.files).forEach(f => handleFileUpload(f));
-  }, [user, files.length]);
+    uploadBatch(Array.from(e.dataTransfer.files));
+  }, [uploadBatch]);
 
   const status = getStatusMessage();
 
@@ -243,6 +275,13 @@ export default function MyReferencesPage() {
             {kn ? 'AI ನಿಮ್ಮ ಆದೇಶಗಳನ್ನು ಅಧ್ಯಯನ ಮಾಡುತ್ತಿದೆ... (30-60 ಸೆಕೆಂಡ್)' : 'AI is studying your orders... (30-60 seconds)'}
           </AlertDescription>
         </Alert>
+      )}
+
+      {duplicateWarning && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 flex items-start gap-2">
+          <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+          <p className="text-sm text-amber-800">{duplicateWarning}</p>
+        </div>
       )}
 
       {error && (

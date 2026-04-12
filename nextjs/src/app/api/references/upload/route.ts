@@ -67,6 +67,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
+    // ── Duplicate check: reject if same file name already uploaded ───────
+    const { data: existingFile } = await adminClient
+      .from('references')
+      .select('id')
+      .eq('user_id', user.id)
+      .ilike('file_name', file.name)
+      .limit(1)
+      .maybeSingle();
+
+    if (existingFile) {
+      return NextResponse.json(
+        { error: `"${file.name}" is already uploaded. Duplicate skipped.` },
+        { status: 409 }
+      );
+    }
+
     const buffer = Buffer.from(await file.arrayBuffer());
 
     // ── Extract text based on file type ──────────────────────────────────────
