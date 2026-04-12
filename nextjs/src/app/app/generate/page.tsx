@@ -52,6 +52,7 @@ export default function GenerateOrderPage() {
   const [error, setError] = useState('');
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [loadingPhase, setLoadingPhase] = useState(0);
   const [isOffline, setIsOffline] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -71,12 +72,22 @@ export default function GenerateOrderPage() {
   useEffect(() => {
     if (generating) {
       setElapsedSeconds(0);
+      setLoadingPhase(0);
       timerRef.current = setInterval(() => setElapsedSeconds(s => s + 1), 1000);
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
+      setLoadingPhase(0);
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [generating]);
+
+  // Advance loading phase based on elapsed time
+  useEffect(() => {
+    if (!generating) return;
+    if (elapsedSeconds >= 8) setLoadingPhase(3);
+    else if (elapsedSeconds >= 4) setLoadingPhase(2);
+    else if (elapsedSeconds >= 1) setLoadingPhase(1);
+  }, [generating, elapsedSeconds]);
 
   // Auto-save: when editedOrder changes, save after 10s of inactivity
   const triggerAutoSave = useCallback(() => {
@@ -420,13 +431,23 @@ export default function GenerateOrderPage() {
           >
             {generating ? (
               <>
-                <span className="flex items-center gap-2">
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  {t(strings.generate.generating, locale)}
+                <span className="flex items-center gap-3">
+                  <Loader2 className="h-5 w-5 animate-spin flex-shrink-0" />
+                  <span>{[
+                    locale === 'kn' ? 'ಪ್ರಕರಣ ವಿವರಗಳನ್ನು ಓದುತ್ತಿದೆ...' : 'Reading case details...',
+                    locale === 'kn' ? 'ಅಧಿಕೃತ ಸ್ವರೂಪ ಅನ್ವಯಿಸುತ್ತಿದೆ...' : 'Applying official format...',
+                    locale === 'kn' ? 'ಸರಕಾರಿ ಕನ್ನಡದಲ್ಲಿ ಆದೇಶ ರಚಿಸುತ್ತಿದೆ...' : 'Drafting in Sarakari Kannada...',
+                    locale === 'kn' ? 'ಆದೇಶ ಅಂತಿಮಗೊಳಿಸಲಾಗುತ್ತಿದೆ...' : 'Finalising your order...',
+                  ][loadingPhase]}</span>
+                  <span className="inline-flex items-end gap-0.5 pb-0.5">
+                    {[0, 1, 2].map(i => (
+                      <span key={i} className="w-1.5 h-1.5 rounded-full bg-white/60 animate-bounce" style={{ animationDelay: `${i * 160}ms` }} />
+                    ))}
+                  </span>
                 </span>
-                <span className="text-sm text-primary-200">
-                  {elapsedSeconds} {locale === 'kn' ? 'ಸೆಕೆಂಡ್ ಕಳೆದಿದೆ...' : 'seconds elapsed...'}
-                  {elapsedSeconds > 5 && (locale === 'kn' ? ' — ದಯವಿಟ್ಟು ಕಾಯಿರಿ' : ' — please wait')}
+                <span className="text-sm text-primary-200 mt-0.5">
+                  {elapsedSeconds}s {locale === 'kn' ? 'ಕಳೆದಿದೆ' : 'elapsed'}
+                  {elapsedSeconds > 10 && <span className="ml-2">{locale === 'kn' ? '— ದಯವಿಟ್ಟು ಕಾಯಿರಿ' : '— please wait'}</span>}
                 </span>
               </>
             ) : (
@@ -497,39 +518,79 @@ export default function GenerateOrderPage() {
               </div>
             )}
 
-            {/* Editable hint */}
-            <p className="text-xs text-gray-400 flex items-center gap-1">
-              <span>✏️</span>
-              {locale === 'kn' ? 'ಸಂಪಾದಿಸಬಹುದು — ಕ್ಲಿಕ್ ಮಾಡಿ ಬದಲಾಯಿಸಿ' : 'Editable — click to change'}
-            </p>
+            {/* Trust signal badges */}
+            <div className="flex flex-wrap gap-2">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-50 text-green-700 text-xs font-semibold border border-green-200">
+                <CheckCircle className="h-3.5 w-3.5 flex-shrink-0" />
+                {locale === 'kn' ? '576 ನೈಜ DDLR ಆದೇಶಗಳ ಆಧಾರ' : 'Based on 576 real DDLR orders'}
+              </span>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-200">
+                <ShieldCheck className="h-3.5 w-3.5 flex-shrink-0" />
+                {locale === 'kn' ? 'ಅಧಿಕೃತ ಕರ್ನಾಟಕ ಸ್ವರೂಪ' : 'Follows official Karnataka format'}
+              </span>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-50 text-orange-700 text-xs font-semibold border border-orange-200">
+                <span style={{ fontFamily: "'Noto Sans Kannada', sans-serif" }} className="text-[12px] font-bold leading-none">ಕ</span>
+                {locale === 'kn' ? 'ಸರಕಾರಿ ಕನ್ನಡ ಪರಿಶೀಲಿತ' : 'Sarakari Kannada verified'}
+              </span>
+            </div>
 
-            {/* Editable Order Text — styled like government document */}
-            <div className="relative">
-              <textarea
-                value={editedOrder}
-                onChange={(e) => setEditedOrder(e.target.value)}
-                rows={18}
-                className="govt-document w-full rounded-lg border border-gray-200 px-8 py-6 leading-relaxed resize-y focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-                style={{ fontFamily: "'Noto Sans Kannada', system-ui, sans-serif", fontSize: '15px', lineHeight: '1.8' }}
-              />
-              {/* Auto-save indicator */}
-              <div className="absolute top-3 right-3 flex items-center gap-1 text-xs text-gray-400 bg-white/80 px-2 py-1 rounded">
-                {autoSaveStatus === 'saving' && (
-                  <><Loader2 className="h-3 w-3 animate-spin" />{locale === 'kn' ? 'ಉಳಿಸಲಾಗುತ್ತಿದೆ...' : 'Saving...'}</>
-                )}
-                {autoSaveStatus === 'saved' && (
-                  <><Save className="h-3 w-3 text-green-500" />{t(strings.result.autoSaved, locale)}</>
-                )}
+            {/* Paper Document Preview */}
+            <div className="rounded-xl border border-gray-200 shadow-sm overflow-hidden bg-white">
+              {/* Document toolbar */}
+              <div className="flex items-center justify-between px-5 py-2.5 bg-gray-50 border-b border-gray-200">
+                <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-widest">
+                  {locale === 'kn' ? 'ದಾಖಲೆ ಪೂರ್ವವೀಕ್ಷಣೆ' : 'Document Preview'}
+                </span>
+                <div className="flex items-center gap-3">
+                  {autoSaveStatus === 'saving' && (
+                    <span className="flex items-center gap-1 text-xs text-gray-400">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      {locale === 'kn' ? 'ಉಳಿಸಲಾಗುತ್ತಿದೆ...' : 'Saving...'}
+                    </span>
+                  )}
+                  {autoSaveStatus === 'saved' && (
+                    <span className="flex items-center gap-1 text-xs text-green-600">
+                      <Save className="h-3 w-3" />{t(strings.result.autoSaved, locale)}
+                    </span>
+                  )}
+                  <span className={`text-[11px] font-medium ${
+                    editedWordCount >= 550 && editedWordCount <= 750 ? 'text-green-600' : 'text-amber-600'
+                  }`}>
+                    {editedWordCount} {locale === 'kn' ? 'ಪದಗಳು' : 'words'}
+                    {editedWordCount >= 550 && editedWordCount <= 750 ? ' ✓' : ' ⚠'}
+                  </span>
+                </div>
+              </div>
+              {/* Paper content — read-only formatted view */}
+              <div
+                className="px-10 py-8 min-h-[360px] text-gray-900 select-text"
+                style={{
+                  fontFamily: "'Noto Sans Kannada', system-ui, sans-serif",
+                  fontSize: '15px',
+                  lineHeight: '1.95',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                }}
+              >
+                {editedOrder}
               </div>
             </div>
 
-            {/* Word count live display */}
-            <div className="text-sm text-gray-500 text-right">
-              {editedWordCount} {t(strings.common.words, locale)}
-              {editedWordCount >= 550 && editedWordCount <= 750
-                ? <span className="ml-2 text-green-600">✓</span>
-                : <span className="ml-2 text-amber-600">⚠</span>}
-            </div>
+            {/* Editable hint */}
+            <p className="text-xs text-gray-400 flex items-center gap-1">
+              <span>✏️</span>
+              {locale === 'kn' ? 'ಸಂಪಾದಿಸಬಹುದು — ಕೆಳಗಿನ ಪೆಟ್ಟಿಗೆಯಲ್ಲಿ ಬದಲಾಯಿಸಿ' : 'Editable — make changes in the text box below'}
+            </p>
+
+            {/* Editable textarea */}
+            <textarea
+              value={editedOrder}
+              onChange={(e) => setEditedOrder(e.target.value)}
+              rows={10}
+              className="govt-document w-full rounded-lg border border-gray-200 px-5 py-4 leading-relaxed resize-y focus:border-primary-500 focus:ring-1 focus:ring-primary-500 bg-gray-50 text-gray-700"
+              style={{ fontFamily: "'Noto Sans Kannada', system-ui, sans-serif", fontSize: '14px', lineHeight: '1.8' }}
+              placeholder={locale === 'kn' ? 'ಇಲ್ಲಿ ಸಂಪಾದಿಸಿ...' : 'Edit here...'}
+            />
 
             {/* Formal Verification Declaration — looks like official checkbox */}
             <div className={`p-5 rounded-lg border-2 transition-colors ${

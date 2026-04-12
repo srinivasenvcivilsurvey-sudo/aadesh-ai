@@ -166,7 +166,7 @@ const strings = {
     trainingStatus: { kn: 'ತರಬೇತಿ ಸ್ಥಿತಿ', en: 'Training Status' },
     recharge: { kn: 'ರೀಚಾರ್ಜ್', en: 'Recharge' },
     freeOrders: { kn: 'ನಿಮಗೆ 2 ಉಚಿತ ಆದೇಶಗಳಿವೆ!', en: 'You have 2 free orders!' },
-    tryDemo: { kn: 'ಡೆಮೊ ಆದೇಶ ರಚಿಸಿ', en: 'Generate Demo Order' },
+    tryDemo: { kn: 'ನಿಮ್ಮ ಮೊದಲ ಆದೇಶ ರಚಿಸಿ', en: 'Generate Your First Order' },
     orSeparator: { kn: 'ಅಥವಾ', en: 'or' },
     startTraining: { kn: 'AI ತರಬೇತಿ ಪ್ರಾರಂಭಿಸಿ', en: 'Start AI Training' },
     showYourOrders: { kn: 'AI ಗೆ ನಿಮ್ಮ ಆದೇಶಗಳನ್ನು ತೋರಿಸಿ', en: 'Show your orders to AI' },

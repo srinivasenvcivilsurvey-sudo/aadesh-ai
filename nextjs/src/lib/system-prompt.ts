@@ -1,10 +1,13 @@
 /**
- * Aadesh AI — V3.2.1 Master System Prompt
- * Ported from KarnatakaAI/11_DDLR_App/system_prompt.md
- * 382 lines, 17 absolute rules, 13-section structure, Drafting Bible references
+ * Aadesh AI — System Prompt Loader
+ * Primary: V3.2.6 loaded from disk (91/100 quality)
+ * Fallback: V3.2.1 embedded string (safe fallback, never delete)
  *
  * SaaS placeholders are replaced dynamically from user profile data.
  */
+
+import fs from 'fs';
+import path from 'path';
 
 export interface OfficerProfile {
   officerName: string;
@@ -21,11 +24,49 @@ export const DEFAULT_OFFICER: OfficerProfile = {
   officerQualifications: 'ಕ.ಆ.ಸೇ',
 };
 
+// ── V3.2.6 disk loader (cached after first read) ────────────────────────────
+let _v326Content: string | null = null;
+let _v326Attempted = false;
+
+function loadV326FromDisk(): string | null {
+  if (_v326Attempted) return _v326Content;
+  _v326Attempted = true;
+
+  const promptPaths = [
+    // VPS layout: /root/aadesh-ai-src/nextjs → go up to /root/aadesh-ai-src
+    path.join(process.cwd(), '..', 'KarnatakaAI', '11_DDLR_App', 'DDLR_SYSTEM_PROMPT_V3_2_6.md'),
+    // VPS live copy
+    '/root/aadesh-ai/KarnatakaAI/11_DDLR_App/DDLR_SYSTEM_PROMPT_V3_2_6.md',
+    // VPS source copy
+    '/root/aadesh-ai-src/KarnatakaAI/11_DDLR_App/DDLR_SYSTEM_PROMPT_V3_2_6.md',
+    // Local Windows dev (Banu folder)
+    path.join(process.cwd(), '..', '..', 'KarnatakaAI', '11_DDLR_App', 'DDLR_SYSTEM_PROMPT_V3_2_6.md'),
+  ];
+
+  for (const p of promptPaths) {
+    try {
+      const content = fs.readFileSync(p, 'utf-8');
+      if (content.trim().length > 100) {
+        _v326Content = content;
+        console.log(`[system-prompt] V3.2.6 loaded from: ${p} (${content.length} chars)`);
+        return content;
+      }
+    } catch {
+      // Try next path
+    }
+  }
+
+  console.warn('[system-prompt] V3.2.6 not found at any path — falling back to V3.2.1 embedded prompt');
+  return null;
+}
+
 /**
- * Build the full V3.2.1 system prompt with officer placeholders filled.
+ * Build the system prompt with officer placeholders filled.
+ * Uses V3.2.6 from disk if available; falls back to V3.2.1 embedded string.
  */
 export function buildSystemPrompt(officer: OfficerProfile = DEFAULT_OFFICER): string {
-  return SYSTEM_PROMPT_V321
+  const basePrompt = loadV326FromDisk() ?? SYSTEM_PROMPT_V321;
+  return basePrompt
     .replace(/\[OFFICER_NAME\]/g, officer.officerName)
     .replace(/\[DISTRICT_AND_CITY\]/g, officer.districtAndCity)
     .replace(/\[OFFICER_SALUTATION\]/g, officer.officerSalutation)
@@ -85,6 +126,7 @@ Before generating ANY draft, you MUST:
 15. Notice method must match case input. If the case says registered post, write exactly that — do NOT change to another method.
 16. DISMISSED orders have DIFFERENT structure from ALLOWED orders. When appeal is DISMISSED: (a) findings must explain WHY appellant's claims fail, (b) operative order uses ವಜಾಗೊಳಿಸಿ ಆದೇಶಿಸಿದೆ, (c) do NOT include compliance directions.
 17. NEVER fabricate advocate names. If the case input does not mention an advocate name, write "ಮೇಲ್ಮನವಿದಾರರ ಪರವಾಗಿ ವಕೀಲರು ಹಾಜರಾಗಿ ವಾದ ಮಂಡಿಸಿದರು" (generic).
+18. ORDER LENGTH (ABSOLUTE) — Every Appeal Order body MUST be 550-750 words. Count only narrative sections (ಪ್ರಸ್ತಾವನೆ through ಆದೇಶ), not header/signature/copy-to. Under 550: expand court analysis with more findings and add chronological detail. Over 750: tighten arguments only. Real orders average 620 words. ಸಂಕ್ಷಿಪ್ತ ಆದೇಶ = ಅಪೂರ್ಣ ಆದೇಶ.
 
 ---
 

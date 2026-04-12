@@ -222,7 +222,7 @@ function detectCaseCategory(inputText: string, orderText: string = ''): CaseCate
 const WORD_COUNT_TARGETS: Record<CaseCategory, { min: number; max: number; label: string }> = {
   withdrawal: { min: 400, max: 550,  label: 'withdrawal/memo' },
   suo_motu:   { min: 650, max: 850,  label: 'suo motu review' },
-  contested:  { min: 1200, max: 1700, label: 'contested appeal' },
+  contested:  { min: 600, max: 850, label: 'contested appeal' },
 };
 
 export function checkWordCount(

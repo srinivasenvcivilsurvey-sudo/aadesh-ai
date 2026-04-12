@@ -14,6 +14,7 @@ function getOrigin(request: Request): string {
 export async function GET(request: Request) {
     const requestUrl = new URL(request.url)
     const code = requestUrl.searchParams.get('code')
+    const next = requestUrl.searchParams.get('next') || '/app'
     const origin = getOrigin(request);
 
     if (code) {
@@ -31,8 +32,8 @@ export async function GET(request: Request) {
             return NextResponse.redirect(new URL('/auth/2fa', origin))
         }
 
-        // All other cases (no MFA, MFA verified, or MFA check failed): go to app
-        return NextResponse.redirect(new URL('/app', origin))
+        // All other cases (no MFA, MFA verified, or MFA check failed): go to destination
+        return NextResponse.redirect(new URL(next, origin))
     }
 
     // If no code provided, redirect to login

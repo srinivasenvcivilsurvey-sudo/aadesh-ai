@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
@@ -18,6 +18,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     const router = useRouter();
     const { user } = useGlobal();
     const { locale, toggleLocale } = useLanguage();
+
+    // Reset scroll to top on every navigation
+    useEffect(() => {
+        window.scrollTo(0, 0);
+    }, [pathname]);
 
     const handleLogout = async () => {
         try {
@@ -53,7 +58,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     const toggleSidebar = () => setSidebarOpen(!isSidebarOpen);
 
     return (
-        <div className="min-h-screen bg-gray-100">
+        <div className="min-h-screen bg-[#FFF7F0]">
             {isSidebarOpen && (
                 <div
                     className="fixed inset-0 bg-gray-600 bg-opacity-75 z-20 lg:hidden"
@@ -62,38 +67,40 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             )}
 
             {/* Sidebar */}
-            <div className={`fixed inset-y-0 left-0 w-64 bg-white shadow-lg transform transition-transform duration-200 ease-in-out z-30
+            <div className={`fixed inset-y-0 left-0 w-64 bg-[#1A237E] border-r border-white/10 shadow-xl transform transition-transform duration-200 ease-in-out z-30
                 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
 
-                <div className="h-16 flex items-center justify-between px-4 border-b">
-                    <span className="text-xl font-semibold text-primary-600">
-                        {t(strings.productName, locale)}
-                    </span>
+                {/* Logo section */}
+                <div className="h-[72px] flex items-center justify-between px-5 border-b border-white/10">
+                    <div className="flex flex-col leading-tight">
+                        <span className="text-[22px] font-black text-white tracking-wide">Aadesh AI</span>
+                        <span className="text-[10px] font-semibold text-[#E97B3B] tracking-[0.15em] uppercase">ಆದೇಶ AI</span>
+                    </div>
                     <button
                         onClick={toggleSidebar}
-                        className="lg:hidden text-gray-500 hover:text-gray-700"
+                        className="lg:hidden text-white/70 hover:text-white"
                     >
                         <X className="h-6 w-6" />
                     </button>
                 </div>
 
                 {/* Navigation */}
-                <nav className="mt-4 px-2 space-y-1">
+                <nav className="mt-4 pr-2 space-y-0.5 pb-32">
                     {navigation.map((item) => {
                         const isActive = pathname === item.href;
                         return (
                             <Link
                                 key={item.href}
                                 href={item.href}
-                                className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md ${
+                                className={`group flex items-center py-2.5 text-sm transition-colors ${
                                     isActive
-                                        ? 'bg-primary-50 text-primary-600'
-                                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                                        ? 'pl-3 pr-3 rounded-r-xl border-l-4 border-[#E97B3B] bg-white/10 text-white font-semibold'
+                                        : 'px-3 rounded-lg text-white/70 hover:bg-white/8 hover:text-white font-medium'
                                 }`}
                             >
                                 <item.icon
-                                    className={`mr-3 h-5 w-5 ${
-                                        isActive ? 'text-primary-500' : 'text-gray-400 group-hover:text-gray-500'
+                                    className={`mr-3 h-5 w-5 flex-shrink-0 ${
+                                        isActive ? 'text-[#E97B3B]' : 'text-white/45 group-hover:text-white/65'
                                     }`}
                                 />
                                 {item.name}
@@ -102,22 +109,48 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     })}
                 </nav>
 
-                {/* Language Toggle — bottom of sidebar */}
-                <div className="absolute bottom-4 left-0 right-0 px-4">
-                    <button
-                        onClick={toggleLocale}
-                        className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-                    >
-                        <Globe className="h-4 w-4 text-gray-500" />
-                        <span className={locale === 'en' ? 'font-bold' : 'text-gray-500'}>EN</span>
-                        <span className="text-gray-300">|</span>
-                        <span className={locale === 'kn' ? 'font-bold' : 'text-gray-500'}>ಕನ್ನಡ</span>
-                    </button>
+                {/* Sidebar bottom — user info + logout + language */}
+                <div className="absolute bottom-0 left-0 right-0 border-t border-white/10 bg-[#151c6b]">
+                    {/* User identity row */}
+                    <div className="flex items-center gap-3 px-4 pt-3 pb-2">
+                        <div className="w-8 h-8 rounded-full bg-[#E97B3B]/25 border border-[#E97B3B]/40 flex items-center justify-center flex-shrink-0">
+                            <span className="text-[#E97B3B] text-xs font-bold">
+                                {user ? getInitials(user.email) : '??'}
+                            </span>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                            <p className="text-white text-xs font-semibold truncate leading-tight">
+                                {user?.email?.split('@')[0] || '—'}
+                            </p>
+                            <p className="text-white/40 text-[10px] truncate leading-tight">
+                                {user?.email || ''}
+                            </p>
+                        </div>
+                        <button
+                            onClick={handleLogout}
+                            title="Sign out"
+                            className="flex-shrink-0 p-1.5 rounded-lg text-white/35 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                        >
+                            <LogOut className="h-4 w-4" />
+                        </button>
+                    </div>
+                    {/* Language toggle */}
+                    <div className="px-4 pb-3">
+                        <button
+                            onClick={toggleLocale}
+                            className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg border border-white/15 hover:bg-white/10 transition-colors"
+                        >
+                            <Globe className="h-3.5 w-3.5 text-white/40" />
+                            <span className={locale === 'en' ? 'font-bold text-white' : 'text-white/40'}>EN</span>
+                            <span className="text-white/25">|</span>
+                            <span className={locale === 'kn' ? 'font-bold text-white' : 'text-white/40'}>ಕನ್ನಡ</span>
+                        </button>
+                    </div>
                 </div>
             </div>
 
             <div className="lg:pl-64">
-                <div className="sticky top-0 z-10 flex items-center justify-between h-16 bg-white shadow-sm px-4">
+                <div className="sticky top-0 z-10 flex items-center justify-between h-[72px] bg-gradient-to-r from-[#1A237E]/[0.04] via-white to-white border-b border-[#F3E5D8] shadow-sm px-6">
                     <button
                         onClick={toggleSidebar}
                         className="lg:hidden text-gray-500 hover:text-gray-700"
@@ -187,7 +220,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     </div>
                 </div>
 
-                <main className="p-4 pb-24 lg:pb-4">
+                <main className="p-5 pb-24 lg:pb-6">
                     {children}
                 </main>
             </div>

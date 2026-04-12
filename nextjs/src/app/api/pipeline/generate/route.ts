@@ -106,7 +106,7 @@ export async function POST(request: NextRequest): Promise<Response> {
         if (!rateLimit.allowed) {
           const resetTime = formatResetTime(rateLimit.resetAt);
           send('error', {
-            message: `ಇಂದು ಗರಿಷ್ಠ 5 ಆದೇಶಗಳ ಮಿತಿ ತಲುಪಿದೆ. ${resetTime} ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ. / Daily limit of 5 orders reached. Try again after ${resetTime}.`,
+            message: `ಇಂದು ಗರಿಷ್ಠ 10 ಆದೇಶಗಳ ಮಿತಿ ತಲುಪಿದೆ. ${resetTime} ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ. / Daily limit of 10 orders reached. Try again after ${resetTime}.`,
             code: 'RATE_LIMIT_DAILY',
             ordersToday: rateLimit.ordersToday,
             resetAt: rateLimit.resetAt,
@@ -144,7 +144,73 @@ export async function POST(request: NextRequest): Promise<Response> {
           return;
         }
 
-        // ── Atomic credit deduction BEFORE generation ─────────────────────────
+        // ── Fetch reference orders — smart scored selection (top 5 best match) ──
+        // FIX 2026-04-12: Fetch up to 20, score by keyword overlap with case,
+        // sort score DESC + uploaded_at DESC, take top 5 (not latest 8).
+        type RefRow = { id: string; extracted_text: string; case_type_id: string; uploaded_at: string };
+        let references: RefRow[] = [];
+
+        const { data: userRefs } = await adminClient
+          .from('references')
+          .select('id, extracted_text, case_type_id, uploaded_at')
+          .eq('user_id', userId)
+          .order('uploaded_at', { ascending: false })
+          .limit(20);
+
+        if (userRefs && userRefs.length > 0) {
+          // Score each reference by keyword overlap with the current case
+          const keywords = extractKeywords(caseSummary);
+          const scored = (userRefs as RefRow[]).map(ref => {
+            const text = ref.extracted_text.toLowerCase();
+            const score = keywords.reduce(
+              (acc, kw) => acc + (text.includes(kw.toLowerCase()) ? 1 : 0),
+              0
+            );
+            return { ref, score };
+          });
+
+          // Sort: highest score first, then most recent as tiebreaker
+          scored.sort((a, b) =>
+            b.score - a.score ||
+            new Date(b.ref.uploaded_at).getTime() - new Date(a.ref.uploaded_at).getTime()
+          );
+
+          // Log top 3 for observability in pm2 logs
+          const top3 = scored.slice(0, 3);
+          console.log(
+            `[ref-select] User ${userId} — scored ${userRefs.length} refs, keywords: ${keywords.length}, ` +
+            `top3: ${top3.map(s => `${s.ref.id.slice(-6)}:${s.score}`).join(', ')}`
+          );
+
+          references = scored.slice(0, 5).map(s => s.ref);
+        } else {
+          // Fallback: try case-type-specific defaults
+          const { data: defaultRefs } = await adminClient
+            .from('references')
+            .select('id, extracted_text, case_type_id, uploaded_at')
+            .eq('user_id', userId)
+            .eq('case_type_id', caseType)
+            .order('uploaded_at', { ascending: false })
+            .limit(5);
+          references = (defaultRefs ?? []) as RefRow[];
+          if (references.length === 0) {
+            console.log(`User ${userId} has no uploaded references — using default system prompt`);
+          }
+        }
+
+        // ── Guard: minimum 5 reference orders required ────────────────────────
+        if (references.length < 5) {
+          console.log('Blocked generation: insufficient references', references.length);
+          send('error', {
+            message: 'Upload minimum 5 reference orders before generating / ಕನಿಷ್ಠ 5 ಉಲ್ಲೇಖ ಆದೇಶಗಳನ್ನು ಅಪ್\u200Cಲೋಡ್ ಮಾಡಿ',
+            code: 'INSUFFICIENT_REFERENCES',
+            referencesFound: references.length,
+          });
+          controller.close();
+          return;
+        }
+
+        // ── Atomic credit deduction — only after all validations pass ────────
         const { data: updateResult, error: deductError } = await adminClient
           .from('profiles')
           .update({
@@ -165,34 +231,6 @@ export async function POST(request: NextRequest): Promise<Response> {
           return;
         }
         creditDeducted = true;
-
-        // ── Fetch reference orders (user's own, then fallback) ─────────────────
-        // FIX 2026-04-12: First try user's own uploaded references (any type),
-        // then fall back to case-type-specific if available.
-        let references: { id: string; extracted_text: string; case_type_id: string; uploaded_at: string }[] = [];
-        const { data: userRefs } = await adminClient
-          .from('references')
-          .select('id, extracted_text, case_type_id, uploaded_at')
-          .eq('user_id', userId)
-          .order('uploaded_at', { ascending: false })
-          .limit(8);
-
-        if (userRefs && userRefs.length > 0) {
-          references = userRefs;
-        } else {
-          // Fallback: try case-type-specific defaults
-          const { data: defaultRefs } = await adminClient
-            .from('references')
-            .select('id, extracted_text, case_type_id, uploaded_at')
-            .eq('user_id', userId)
-            .eq('case_type_id', caseType)
-            .order('uploaded_at', { ascending: false })
-            .limit(8);
-          references = defaultRefs ?? [];
-          if (references.length === 0) {
-            console.log(`User ${userId} has no uploaded references — using default system prompt`);
-          }
-        }
 
         // ── Get personal prompt from profile ─────────────────────────────────
         const personalPrompt = (profile as Record<string, unknown>).personal_prompt as string | undefined;
@@ -362,6 +400,23 @@ export async function POST(request: NextRequest): Promise<Response> {
       'Connection': 'keep-alive',
     },
   });
+}
+
+// ── Keyword extractor for smart reference scoring ────────────────────────────
+
+function extractKeywords(cs: CaseSummary): string[] {
+  const rawParts = [
+    ...(cs.keyFacts ?? []),
+    cs.parties?.petitioner ?? '',
+    cs.parties?.respondent ?? '',
+    cs.reliefSought ?? '',
+  ];
+  const combined = rawParts.join(' ');
+  // Split into words; keep Kannada unicode (ಅ-ಿ range) and alphanumeric; skip short words
+  return combined
+    .split(/\s+/)
+    .map(w => w.replace(/[^\u0C00-\u0C7F\w]/g, '').trim())
+    .filter(w => w.length > 3);
 }
 
 // ── Credit refund ─────────────────────────────────────────────────────────────

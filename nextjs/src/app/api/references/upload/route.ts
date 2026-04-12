@@ -151,10 +151,46 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       .select('id', { count: 'exact', head: true })
       .eq('user_id', user.id);
 
+    const newCount = totalCount ?? 0;
+
+    // ── Auto-trigger personal prompt generation when user first reaches 5 refs ──
+    // Fire-and-forget async IIFE: does NOT block the upload response.
+    if (newCount >= 5) {
+      void (async () => {
+        try {
+          const { data: profile } = await adminClient
+            .from('profiles')
+            .select('personal_prompt')
+            .eq('id', user.id)
+            .single();
+
+          if (!profile?.personal_prompt) {
+            console.log(`[auto-prompt] Triggering personal prompt for user ${user.id} (${newCount} references)`);
+            const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+            const r = await fetch(`${baseUrl}/api/references/generate-prompt`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': authHeader!, // Reuse Bearer token from upload request
+              },
+            });
+            if (!r.ok) {
+              const d = await r.json().catch(() => ({})) as unknown;
+              console.error(`[auto-prompt] Failed for user ${user.id}:`, d);
+            } else {
+              console.log(`[auto-prompt] Successfully generated prompt for user ${user.id}`);
+            }
+          }
+        } catch (err) {
+          console.error(`[auto-prompt] Error for user ${user.id}:`, err);
+        }
+      })();
+    }
+
     return NextResponse.json({
       success: true,
       file_name: file.name,
-      total_count: totalCount ?? 0,
+      total_count: newCount,
       text_length: extractedText.length,
     });
   } catch (err) {
