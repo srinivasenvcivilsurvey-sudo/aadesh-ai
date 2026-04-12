@@ -20,6 +20,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
 import type { CaseSummary, VisionReadResponse } from '@/lib/pipeline/types';
 import mammoth from 'mammoth';
+import { checkDailyLimit, formatResetTime } from '@/lib/pipeline/rateLimiter';
 
 const VISION_MODEL = 'claude-sonnet-4-6';
 const VISION_TIMEOUT_MS = 60_000;
@@ -91,6 +92,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json(
       { error: 'à²•à³à²°à³†à²¡à²¿à²Ÿà³â€Œà²—à²³à³ à²–à²¾à²²à²¿à²¯à²¾à²—à²¿à²µà³†. à²¦à²¯à²µà²¿à²Ÿà³à²Ÿà³ à²°à³€à²šà²¾à²°à³à²œà³ à²®à²¾à²¡à²¿ / No credits remaining. Please recharge.' },
       { status: 402 }
+    );
+  }
+
+  // ── Rate limit check (FIX 2026-04-12: gate before Vision API call) ─────
+  const rateLimit = await checkDailyLimit(user.id, adminClient);
+  if (!rateLimit.allowed) {
+    const resetTime = formatResetTime(rateLimit.resetAt);
+    return NextResponse.json(
+      {
+        error: `Daily limit reached. Try again after ${resetTime}.`,
+        code: 'RATE_LIMIT_DAILY',
+      },
+      { status: 429 }
     );
   }
 

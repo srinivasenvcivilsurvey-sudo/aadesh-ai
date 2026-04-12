@@ -64,11 +64,12 @@ export function redactPII(text: string): RedactionResult {
   let result = text;
 
   // ── 1. Redact survey numbers ──────────────────────────────────────────────
-  // Patterns: "45/2", "ಸರ್ವೆ ನಂ. 45/2", "ಸ.ನಂ. 45/2", "ಸರ್ವೆ ನಂಬರ್ 45/2"
+  // FIX 2026-04-12: Removed bare N/N/N pattern — it was masking dates like 12/3/2025.
+  // Now only match survey numbers preceded by Kannada context words.
+  // ✓ "ಸ.ನಂ 45/3" → survey number redacted correctly
+  // ✓ "12/3/2025" → NOT redacted (preserved as date for accuracy)
   const surveyPatterns = [
-    /ಸರ್ವೆ\s*ನಂ[ಬರ್]*[.\s]*(\d+\/\d+(?:\/\d+)?)/g,
-    /ಸ\.ನಂ\.\s*(\d+\/\d+(?:\/\d+)?)/g,
-    /(?<!\w)(\d+\/\d+(?:\/\d+)?)(?!\w)/g,  // bare survey number format
+    /(ಸರ್ವೆ\s*ನಂ|ಸ\.ನಂ|ಸರ್ವೆ\s*ನಂಬರ್)[\s.:]*(\d+\/\d+(?:\/\d+)?)/g,
   ];
 
   for (const pattern of surveyPatterns) {
@@ -112,27 +113,11 @@ export function redactPII(text: string): RedactionResult {
     return prefix + placeholder;
   });
 
-  // Also redact standalone Kannada proper nouns (3+ chars, not stop-words)
-  // These appear in party names, petitioner/respondent fields
-  // Use word boundary approach instead of lookbehind for broader compatibility
-  const standaloneNamePattern = new RegExp(
-    `(^|[\\s,;:।।])([ಅ-ಹ\u0C80-\u0CFF]{3,}(?:\\s+[ಅ-ಹ\u0C80-\u0CFF]{3,}){0,2})(?=[\\s,;:।।]|$)`,
-    'gm'
-  );
-
-  result = result.replace(standaloneNamePattern, (match, nameGroup) => {
-    if (match.includes('[NAME_') || match.includes('[VILLAGE_') || match.includes('[SURVEY_')) {
-      return match;
-    }
-    const trimmed = nameGroup.trim();
-    if (KANNADA_STOP_WORDS.has(trimmed)) return match;
-    if (trimmed.length < 3) return match;
-    // Skip if it looks like a village (already handled)
-    if (VILLAGE_SUFFIXES.some(s => trimmed.endsWith(s))) return match;
-    const placeholder = `[NAME_${nameCounter++}]`;
-    map.set(placeholder, trimmed);
-    return match.replace(trimmed, placeholder);
-  });
+  // FIX 2026-04-12: Removed standalone Kannada word masking — it was killing
+  // revenue terms like "ಮಾಲೀಕ" (owner), "ಭೋಗ್ಯದಾರ" (lessee) which are critical
+  // for generation accuracy. Now ONLY mask names following honorifics.
+  // ✓ "ಮಾಲೀಕ" alone → NOT redacted (revenue term preserved)
+  // ✓ "ಶ್ರೀ ರಾಮಕೃಷ್ಣ" → name after honorific IS redacted
 
   return { redacted: result, map };
 }

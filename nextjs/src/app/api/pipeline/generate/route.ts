@@ -19,7 +19,7 @@ import { validateEnv } from '@/lib/validateEnv';
 import type { CaseSummary, OfficerAnswers } from '@/lib/pipeline/types';
 
 const GENERATION_MODEL = 'claude-sonnet-4-6';
-const PROMPT_VERSION = 'V3.2.1';
+const PROMPT_VERSION = 'V3.2.6'; // FIX 2026-04-12: Updated; personal_prompt overrides when available
 const MAX_TOKENS = 8192;
 const GENERATION_TIMEOUT_MS = 120_000;
 const SIMPLE_CASE_TYPES = ['withdrawal', 'suo_motu'];
@@ -115,10 +115,10 @@ export async function POST(request: NextRequest): Promise<Response> {
           return;
         }
 
-        // ── Load profile ──────────────────────────────────────────────────────
+        // ── Load profile (includes personal_prompt for per-user personalization) ──
         const { data: profile, error: profileError } = await adminClient
           .from('profiles')
-          .select('credits_remaining, officer_name, designation, district, salutation, full_name')
+          .select('credits_remaining, officer_name, designation, district, salutation, full_name, personal_prompt, training_status')
           .eq('id', userId)
           .single();
 
@@ -166,14 +166,36 @@ export async function POST(request: NextRequest): Promise<Response> {
         }
         creditDeducted = true;
 
-        // ── Fetch reference orders ────────────────────────────────────────────
-        const { data: references } = await adminClient
+        // ── Fetch reference orders (user's own, then fallback) ─────────────────
+        // FIX 2026-04-12: First try user's own uploaded references (any type),
+        // then fall back to case-type-specific if available.
+        let references: { id: string; extracted_text: string; case_type_id: string; uploaded_at: string }[] = [];
+        const { data: userRefs } = await adminClient
           .from('references')
           .select('id, extracted_text, case_type_id, uploaded_at')
           .eq('user_id', userId)
-          .eq('case_type_id', caseType)
           .order('uploaded_at', { ascending: false })
           .limit(8);
+
+        if (userRefs && userRefs.length > 0) {
+          references = userRefs;
+        } else {
+          // Fallback: try case-type-specific defaults
+          const { data: defaultRefs } = await adminClient
+            .from('references')
+            .select('id, extracted_text, case_type_id, uploaded_at')
+            .eq('user_id', userId)
+            .eq('case_type_id', caseType)
+            .order('uploaded_at', { ascending: false })
+            .limit(8);
+          references = defaultRefs ?? [];
+          if (references.length === 0) {
+            console.log(`User ${userId} has no uploaded references — using default system prompt`);
+          }
+        }
+
+        // ── Get personal prompt from profile ─────────────────────────────────
+        const personalPrompt = (profile as Record<string, unknown>).personal_prompt as string | undefined;
 
         const officerProfile: OfficerProfile = {
           officerName: profile.officer_name ?? profile.full_name ?? officerAnswers.officerName,
@@ -224,7 +246,7 @@ export async function POST(request: NextRequest): Promise<Response> {
             setTimeout(() => reject(new Error('Generation timeout after 120 seconds')), GENERATION_TIMEOUT_MS)
           );
           const result = await Promise.race([
-            generateWithClaude(anthropicKey, officerProfile, references ?? [], redactedCaseSummary, redactedAnswers, send),
+            generateWithClaude(anthropicKey, officerProfile, references ?? [], redactedCaseSummary, redactedAnswers, send, personalPrompt),
             timeoutPromise,
           ]);
 
@@ -270,7 +292,7 @@ export async function POST(request: NextRequest): Promise<Response> {
           const correctionInstruction = buildCorrectionInstruction(auditResult);
           const correctedResult = await regenerateWithCorrection(
             anthropicKey, officerProfile, references ?? [],
-            redactedCaseSummary, redactedAnswers, correctionInstruction
+            redactedCaseSummary, redactedAnswers, correctionInstruction, personalPrompt
           );
           if (correctedResult) {
             const { result: reinjectedCorrection, anomalies: correctionAnomalies } = reInjectPII(correctedResult, piiMap);
@@ -391,10 +413,11 @@ async function generateWithClaude(
   references: ReferenceOrder[],
   caseSummary: CaseSummary,
   answers: OfficerAnswers,
-  send: (event: string, data: unknown) => void
+  send: (event: string, data: unknown) => void,
+  personalPrompt?: string
 ): Promise<{ text: string; cachedTokens: number; inputTokens: number; outputTokens: number }> {
   const client = new Anthropic({ apiKey });
-  const { messages } = buildPrompt(profile, references, caseSummary, answers);
+  const { messages } = buildPrompt(profile, references, caseSummary, answers, personalPrompt);
 
   let fullText = '';
   let cachedTokens = 0;
@@ -440,11 +463,12 @@ async function regenerateWithCorrection(
   references: ReferenceOrder[],
   caseSummary: CaseSummary,
   answers: OfficerAnswers,
-  correctionInstruction: string
+  correctionInstruction: string,
+  personalPrompt?: string
 ): Promise<string | null> {
   try {
     const client = new Anthropic({ apiKey });
-    const { messages } = buildPrompt(profile, references, caseSummary, answers);
+    const { messages } = buildPrompt(profile, references, caseSummary, answers, personalPrompt);
 
     const lastMessage = messages[messages.length - 1];
     const lastContent = lastMessage.content[lastMessage.content.length - 1];

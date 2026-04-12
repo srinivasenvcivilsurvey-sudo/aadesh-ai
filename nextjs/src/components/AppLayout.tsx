@@ -42,6 +42,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     const navigation = [
         { name: t(strings.nav.dashboard, locale), href: '/app', icon: Home },
         { name: t(strings.nav.trainAI, locale), href: '/app/train', icon: Brain },
+        { name: locale === 'kn' ? 'ಉಲ್ಲೇಖ ಆದೇಶಗಳು' : 'My References', href: '/app/my-references', icon: Upload },
         { name: t(strings.nav.generateOrder, locale), href: '/app/generate', icon: FileText },
         { name: t(strings.nav.myOrders, locale), href: '/app/my-orders', icon: Files },
         { name: t(strings.nav.myFiles, locale), href: '/app/storage', icon: Upload },

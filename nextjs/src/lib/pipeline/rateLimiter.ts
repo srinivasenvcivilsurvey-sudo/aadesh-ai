@@ -10,7 +10,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logError } from './errorLogger';
 
-const MAX_ORDERS_PER_DAY = 5;
+const MAX_ORDERS_PER_DAY = 10; // FIX 2026-04-12: 5→10 per user per day
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000; // 5 hours 30 minutes in milliseconds
 
 export interface RateLimitResult {

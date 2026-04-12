@@ -48,21 +48,26 @@ export interface ReferenceOrder {
  * @param references - Reference orders from Supabase references table (pre-filtered by case type, ordered by uploaded_at DESC)
  * @param caseSummary - Structured case summary from Vision Reader
  * @param answers - Officer's answers to clarifying questions
+ * @param personalPrompt - Optional auto-generated personal prompt (overrides default system prompt)
  * @returns BuiltPrompt with messages array and estimated token count
  */
 export function buildPrompt(
   profile: OfficerProfile,
   references: ReferenceOrder[],
   caseSummary: CaseSummary,
-  answers: OfficerAnswers
+  answers: OfficerAnswers,
+  personalPrompt?: string
 ): BuiltPrompt {
   // ── 1. System Prompt (CACHED) ──────────────────────────────────────────────
-  const systemPromptText = buildSystemPrompt({
-    officerName: profile.officerName,
-    districtAndCity: profile.districtAndCity ?? `${profile.district}`,
-    officerSalutation: profile.salutation,
-    officerQualifications: profile.designation,
-  });
+  // FIX 2026-04-12: Use personal_prompt if available (auto-generated from officer's own orders)
+  const systemPromptText = personalPrompt?.trim()
+    ? personalPrompt
+    : buildSystemPrompt({
+        officerName: profile.officerName,
+        districtAndCity: profile.districtAndCity ?? `${profile.district}`,
+        officerSalutation: profile.salutation,
+        officerQualifications: profile.designation,
+      });
 
   const systemPromptBlock: AnthropicContentBlock = {
     type: 'text',
