@@ -96,6 +96,7 @@ export function FileUploadStep({ dispatch, locale }: FileUploadStepProps) {
 
     try {
       base64 = await fileToBase64(file);
+      console.log('[FileUploadStep] base64 ready, size:', base64.length, 'mime:', file.type);
 
       const headers = await getAuthHeaders();
       if (!headers) {
@@ -104,6 +105,7 @@ export function FileUploadStep({ dispatch, locale }: FileUploadStepProps) {
         return;
       }
 
+      console.log('[FileUploadStep] calling /api/pipeline/validate...');
       const response = await fetch('/api/pipeline/validate', {
         method: 'POST',
         headers,
@@ -111,6 +113,7 @@ export function FileUploadStep({ dispatch, locale }: FileUploadStepProps) {
       });
 
       const result = await response.json();
+      console.log('[FileUploadStep] validate result:', result);
 
       if (!result.valid) {
         setError(result.error || (kn ? 'ಫೈಲ್ ಪರಿಶೀಲನೆ ವಿಫಲವಾಯಿತು / Validation failed' : 'Validation failed'));
@@ -125,6 +128,7 @@ export function FileUploadStep({ dispatch, locale }: FileUploadStepProps) {
         sessionStorage.setItem('pipeline_case_type_hint', selectedCaseType);
       }
 
+      console.log('[FileUploadStep] validation passed — dispatching SET_STEP:reading');
       dispatch({ type: 'SET_STEP', step: 'reading' });
     } catch (err) {
       console.error('[FileUploadStep] validate error:', err);

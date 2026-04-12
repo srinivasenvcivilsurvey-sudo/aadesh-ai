@@ -33,7 +33,10 @@ export function VisionReadingStep({ dispatch, locale }: VisionReadingStepProps) 
     const mimeType = sessionStorage.getItem('pipeline_file_mime');
     const pageCount = parseInt(sessionStorage.getItem('pipeline_file_page_count') ?? '1', 10);
 
+    console.log('[VisionReadingStep] readCaseFile — fileBase64 length:', fileBase64?.length ?? 0, 'mime:', mimeType);
+
     if (!fileBase64 || !mimeType) {
+      console.error('[VisionReadingStep] sessionStorage missing file data!');
       setError(kn ? 'ಫೈಲ್ ಡೇಟಾ ಕಾಣೆಯಾಗಿದೆ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಅಪ್\u200Cಲೋಡ್ ಮಾಡಿ / File data missing. Please re-upload.' : 'File data missing. Please re-upload.');
       return;
     }
@@ -41,21 +44,28 @@ export function VisionReadingStep({ dispatch, locale }: VisionReadingStepProps) 
     try {
       const headers = await getAuthHeaders();
       if (!headers) {
+        console.error('[VisionReadingStep] No auth headers — session expired');
         setError(kn ? 'ಸೆಷನ್ ಮುಕ್ತಾಯ. ಮರುಲಾಗಿನ್ ಮಾಡಿ / Session expired. Please login.' : 'Session expired. Please login.');
         return;
       }
+
+      console.log('[VisionReadingStep] calling /api/pipeline/vision-read, pageCount:', pageCount);
       const response = await fetch('/api/pipeline/vision-read', {
         method: 'POST',
         headers,
         body: JSON.stringify({ fileBase64, mimeType, pageCount }),
       });
 
+      console.log('[VisionReadingStep] vision-read response status:', response.status);
+
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error || 'Vision read failed');
+        console.error('[VisionReadingStep] vision-read error response:', response.status, data);
+        throw new Error(data.error || `Vision read failed (${response.status})`);
       }
 
       const data = await response.json();
+      console.log('[VisionReadingStep] vision-read success, caseType:', data.caseType);
       setCaseSummary(data.caseSummary);
       setQuestions(data.questions);
       setCaseType(data.caseType);
@@ -63,6 +73,7 @@ export function VisionReadingStep({ dispatch, locale }: VisionReadingStepProps) 
       // Clear file from sessionStorage — no longer needed
       sessionStorage.removeItem('pipeline_file_base64');
     } catch (err) {
+      console.error('[VisionReadingStep] error:', err);
       setError(err instanceof Error ? err.message : (kn
         ? 'ಫೈಲ್ ಓದಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೊಮ್ಮೆ ಪ್ರಯತ್ನಿಸಿ / Could not read file. Please retry.'
         : 'Could not read file. Please retry.'

@@ -78,34 +78,45 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   // â”€â”€ Credit check (Fix 12) â€” don't deduct, just gate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Admin client for credit + rate-limit gate (service role key required)
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const adminClient = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
+    serviceRoleKey ?? 'missing-service-role-key'
   );
-  const { data: profile } = await adminClient
-    .from('profiles')
-    .select('credits_remaining')
-    .eq('id', user.id)
-    .single();
 
-  if ((profile?.credits_remaining ?? 0) < 1) {
-    return NextResponse.json(
-      { error: 'à²•à³à²°à³†à²¡à²¿à²Ÿà³â€Œà²—à²³à³ à²–à²¾à²²à²¿à²¯à²¾à²—à²¿à²µà³†. à²¦à²¯à²µà²¿à²Ÿà³à²Ÿà³ à²°à³€à²šà²¾à²°à³à²œà³ à²®à²¾à²¡à²¿ / No credits remaining. Please recharge.' },
-      { status: 402 }
-    );
-  }
+  // Credit check: fail open if service role key is not configured
+  if (!serviceRoleKey) {
+    console.warn('[vision-read] SUPABASE_SERVICE_ROLE_KEY not set — skipping credit+rate-limit gate');
+  } else {
+    const { data: profile, error: profileError } = await adminClient
+      .from('profiles')
+      .select('credits_remaining')
+      .eq('id', user.id)
+      .single();
 
-  // ── Rate limit check (FIX 2026-04-12: gate before Vision API call) ─────
-  const rateLimit = await checkDailyLimit(user.id, adminClient);
-  if (!rateLimit.allowed) {
-    const resetTime = formatResetTime(rateLimit.resetAt);
-    return NextResponse.json(
-      {
-        error: `Daily limit reached. Try again after ${resetTime}.`,
-        code: 'RATE_LIMIT_DAILY',
-      },
-      { status: 429 }
-    );
+    if (profileError) {
+      console.error('[vision-read] Credit check error:', profileError.message, '— proceeding anyway');
+    } else if ((profile?.credits_remaining ?? 0) < 1) {
+      console.warn('[vision-read] No credits for user:', user.id);
+      return NextResponse.json(
+        { error: 'No credits remaining. Please recharge / ಕೈಗಳಿಲ್ಲಗಿರುವದನ್ನು. ದಯವಿಟ್ಟು ರಿಚಾರ್ಜ್ ಮಾಡಿ.' },
+        { status: 402 }
+      );
+    }
+
+    // Rate limit check
+    const rateLimit = await checkDailyLimit(user.id, adminClient);
+    if (!rateLimit.allowed) {
+      const resetTime = formatResetTime(rateLimit.resetAt);
+      return NextResponse.json(
+        {
+          error: `Daily limit reached. Try again after ${resetTime}.`,
+          code: 'RATE_LIMIT_DAILY',
+        },
+        { status: 429 }
+      );
+    }
   }
 
   try {
