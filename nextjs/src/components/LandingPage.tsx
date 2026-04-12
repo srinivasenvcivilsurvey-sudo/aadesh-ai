@@ -196,9 +196,15 @@ function useFadeIn<T extends HTMLElement>() {
   useEffect(() => {
     if (!ref.current) return;
     const el = ref.current;
+    // Immediately show elements already in viewport — fixes blank sections
+    const rect = el.getBoundingClientRect();
+    if (rect.top < window.innerHeight) {
+      setVisible(true);
+      return;
+    }
     const io = new IntersectionObserver(
       (entries) => { entries.forEach((e) => { if (e.isIntersecting) { setVisible(true); io.unobserve(e.target); } }); },
-      { threshold: 0.1 }
+      { threshold: 0.05 }
     );
     io.observe(el);
     return () => io.disconnect();
@@ -473,9 +479,9 @@ export default function LandingPage() {
           </div>
         </Reveal>
 
-        {/* CTAs — primary + secondary */}
+        {/* CTA — single primary */}
         <Reveal delay={400}>
-          <div style={{ marginTop: 36, display: "flex", gap: 20, justifyContent: "center", flexWrap: "wrap" }}>
+          <div style={{ marginTop: 36, display: "flex", justifyContent: "center" }}>
             <Link href="/auth/register" style={{
               display: "inline-flex", alignItems: "center", gap: 10,
               background: `linear-gradient(135deg, ${C.saffron}, ${C.saffronDark})`,
@@ -483,17 +489,8 @@ export default function LandingPage() {
               borderRadius: 12, fontSize: 17, fontWeight: 700, textDecoration: "none",
               boxShadow: "0 6px 20px rgba(233,123,59,0.35)",
             }}>
-              <Bi en="Get Started Free" kn="ಉಚಿತವಾಗಿ ಪ್ರಾರಂಭಿಸಿ" locale={locale} />
-              <ArrowRight size={22} />
+              Try 3 free orders — ಉಚಿತವಾಗಿ ಪ್ರಯತ್ನಿಸಿ →
             </Link>
-            <a href="#how" style={{
-              display: "inline-flex", alignItems: "center", gap: 10,
-              background: "transparent", color: C.brownDisplay, padding: "18px 44px",
-              borderRadius: 12, fontSize: 17, fontWeight: 700, textDecoration: "none",
-              border: `2px solid ${C.brownDisplay}`,
-            }}>
-              <Bi en="Learn more" kn="ಇನ್ನಷ್ಟು ತಿಳಿಯಿರಿ" locale={locale} />
-            </a>
           </div>
         </Reveal>
 
@@ -868,6 +865,11 @@ export default function LandingPage() {
               </Reveal>
             ))}
           </div>
+          <Reveal delay={400}>
+            <p style={{ textAlign: "center", marginTop: 24, fontSize: 13, color: C.midGray, fontFamily: "'Noto Sans Kannada', sans-serif" }}>
+              ಚಂದಾ ಇಲ್ಲ. ಬಳಸಿದಷ್ಟು ಪಾವತಿಸಿ. &nbsp;/&nbsp; No subscription. Pay only when you use.
+            </p>
+          </Reveal>
         </div>
       </section>
 
