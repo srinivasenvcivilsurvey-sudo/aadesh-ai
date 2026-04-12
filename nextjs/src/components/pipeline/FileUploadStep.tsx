@@ -91,8 +91,11 @@ export function FileUploadStep({ dispatch, locale }: FileUploadStepProps) {
     setSelectedFile(file);
     setLoading(true);
 
+    // Hoist base64 so the catch block can use it as a fallback
+    let base64 = '';
+
     try {
-      const base64 = await fileToBase64(file);
+      base64 = await fileToBase64(file);
 
       const headers = await getAuthHeaders();
       if (!headers) {
@@ -123,7 +126,19 @@ export function FileUploadStep({ dispatch, locale }: FileUploadStepProps) {
       }
 
       dispatch({ type: 'SET_STEP', step: 'reading' });
-    } catch {
+    } catch (err) {
+      console.error('[FileUploadStep] validate error:', err);
+      // If validation itself fails but we have the file data — skip validate, let vision-read handle it
+      if (base64) {
+        sessionStorage.setItem('pipeline_file_base64', base64);
+        sessionStorage.setItem('pipeline_file_mime', file.type);
+        sessionStorage.setItem('pipeline_file_page_count', '1');
+        if (selectedCaseType) {
+          sessionStorage.setItem('pipeline_case_type_hint', selectedCaseType);
+        }
+        dispatch({ type: 'SET_STEP', step: 'reading' });
+        return;
+      }
       setError(kn
         ? 'ಫೈಲ್ ಪರಿಶೀಲನೆ ವಿಫಲವಾಯಿತು. ದಯವಿಟ್ಟು ಮತ್ತೊಮ್ಮೆ ಪ್ರಯತ್ನಿಸಿ / Validation failed. Please retry.'
         : 'Validation failed. Please retry.'

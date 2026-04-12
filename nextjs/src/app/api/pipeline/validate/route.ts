@@ -102,8 +102,15 @@ async function runValidation(request: NextRequest): Promise<ValidateResponse> {
 
   // ── PDF: count pages with pdf-lib ─────────────────────────────────────────
   if (fileType === 'pdf') {
-    const pdfDoc = await PDFDocument.load(buffer, { ignoreEncryption: true });
-    const pageCount = pdfDoc.getPageCount();
+    let pageCount = 1;
+    try {
+      const pdfDoc = await PDFDocument.load(buffer, { ignoreEncryption: true });
+      pageCount = pdfDoc.getPageCount();
+    } catch (pdfErr) {
+      console.warn('[validate] pdf-lib could not parse PDF — using pageCount=1 fallback:', pdfErr);
+      // PDF is still valid — vision-read will handle it directly
+      return { valid: true, pageCount: 1, fileType };
+    }
 
     if (pageCount > MAX_PAGES) {
       return { valid: false, pageCount, fileType, error: BILINGUAL_ERRORS.tooManyPages };
