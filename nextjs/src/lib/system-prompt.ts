@@ -6,8 +6,9 @@
  * SaaS placeholders are replaced dynamically from user profile data.
  */
 
-import fs from 'fs';
-import path from 'path';
+// NOTE: fs and path are required lazily inside loadV326FromDisk() only.
+// Do NOT import them at top level — system-prompt.ts is transitively imported
+// by client-side bundles (via buildPrompt.ts) and fs/path would crash the browser.
 
 export interface OfficerProfile {
   officerName: string;
@@ -32,28 +33,41 @@ function loadV326FromDisk(): string | null {
   if (_v326Attempted) return _v326Content;
   _v326Attempted = true;
 
-  const promptPaths = [
-    // VPS layout: /root/aadesh-ai-src/nextjs → go up to /root/aadesh-ai-src
-    path.join(process.cwd(), '..', 'KarnatakaAI', '11_DDLR_App', 'DDLR_SYSTEM_PROMPT_V3_2_6.md'),
-    // VPS live copy
-    '/root/aadesh-ai/KarnatakaAI/11_DDLR_App/DDLR_SYSTEM_PROMPT_V3_2_6.md',
-    // VPS source copy
-    '/root/aadesh-ai-src/KarnatakaAI/11_DDLR_App/DDLR_SYSTEM_PROMPT_V3_2_6.md',
-    // Local Windows dev (Banu folder)
-    path.join(process.cwd(), '..', '..', 'KarnatakaAI', '11_DDLR_App', 'DDLR_SYSTEM_PROMPT_V3_2_6.md'),
-  ];
+  // Guard: never run in browser — fs does not exist client-side
+  if (typeof window !== 'undefined') return null;
 
-  for (const p of promptPaths) {
-    try {
-      const content = fs.readFileSync(p, 'utf-8');
-      if (content.trim().length > 100) {
-        _v326Content = content;
-        console.log(`[system-prompt] V3.2.6 loaded from: ${p} (${content.length} chars)`);
-        return content;
+  try {
+    // Lazy require — keeps this module safe to import from client bundles
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require('fs') as typeof import('fs');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const path = require('path') as typeof import('path');
+
+    const promptPaths = [
+      // VPS layout: process.cwd() = /root/aadesh-ai-src/nextjs → go up one level
+      path.join(process.cwd(), '..', 'KarnatakaAI', '11_DDLR_App', 'DDLR_SYSTEM_PROMPT_V3_2_6.md'),
+      // VPS live copy
+      '/root/aadesh-ai/KarnatakaAI/11_DDLR_App/DDLR_SYSTEM_PROMPT_V3_2_6.md',
+      // VPS source copy
+      '/root/aadesh-ai-src/KarnatakaAI/11_DDLR_App/DDLR_SYSTEM_PROMPT_V3_2_6.md',
+      // Local Windows dev (Banu folder two levels up from nextjs/)
+      path.join(process.cwd(), '..', '..', 'KarnatakaAI', '11_DDLR_App', 'DDLR_SYSTEM_PROMPT_V3_2_6.md'),
+    ];
+
+    for (const p of promptPaths) {
+      try {
+        const content = fs.readFileSync(p, 'utf-8');
+        if (content.trim().length > 100) {
+          _v326Content = content;
+          console.log(`[system-prompt] V3.2.6 loaded from: ${p} (${content.length} chars)`);
+          return content;
+        }
+      } catch {
+        // Try next path
       }
-    } catch {
-      // Try next path
     }
+  } catch {
+    // fs/path not available — running in edge runtime or unexpected env
   }
 
   console.warn('[system-prompt] V3.2.6 not found at any path — falling back to V3.2.1 embedded prompt');
