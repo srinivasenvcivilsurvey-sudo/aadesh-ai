@@ -6,6 +6,7 @@
 
 import { NextRequest } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { buildPrompt, type OfficerProfile, type ReferenceOrder } from '@/lib/pipeline/buildPrompt';
 import { auditOrder, buildCorrectionInstruction } from '@/lib/pipeline/auditOrder';
@@ -71,6 +72,7 @@ export async function POST(request: NextRequest): Promise<Response> {
           officerAnswers: OfficerAnswers;
           sessionOrderCount?: number;
         };
+        const selectedModel = officerAnswers.selectedModel ?? 'sarvam';
 
         resolvedUserId = authenticatedUserId;
         const userId = authenticatedUserId;
@@ -198,11 +200,14 @@ export async function POST(request: NextRequest): Promise<Response> {
           }
         }
 
-        // ── Guard: minimum 5 reference orders required ────────────────────────
-        if (references.length < 5) {
-          console.log('Blocked generation: insufficient references', references.length);
+        // ── Guard: partial uploads (1-4) are suspicious — block with guidance ──
+        // 0 refs = new user, system prompt only — allowed
+        // 1-4 refs = incomplete upload set — block and guide
+        // 5+ refs = personalized generation — allowed
+        if (references.length > 0 && references.length < 5) {
+          console.log('Blocked generation: partial references', references.length);
           send('error', {
-            message: 'Upload minimum 5 reference orders before generating / ಕನಿಷ್ಠ 5 ಉಲ್ಲೇಖ ಆದೇಶಗಳನ್ನು ಅಪ್\u200Cಲೋಡ್ ಮಾಡಿ',
+            message: `${references.length} ಉಲ್ಲೇಖ ಆದೇಶಗಳು ಕಂಡಿವೆ. ಕನಿಷ್ಠ 5 ಅಪ್\u200Cಲೋಡ್ ಮಾಡಿ / Found ${references.length} reference orders. Upload minimum 5 to continue.`,
             code: 'INSUFFICIENT_REFERENCES',
             referencesFound: references.length,
           });
@@ -270,16 +275,28 @@ export async function POST(request: NextRequest): Promise<Response> {
         let outputTokens = 0;
         let modelUsed = GENERATION_MODEL;
 
-        if (isSimplePath && sarvamKey) {
-          // Simplified path: Sarvam 105B (free, no PII redaction needed)
+        // ── Route to selected AI provider ─────────────────────────────────────
+        if (selectedModel === 'sarvam') {
+          // Sarvam 105B — free, default
+          if (!sarvamKey) {
+            send('error', { message: 'Sarvam API key not configured / Sarvam API ಕೀ ಕಾನ್ಫಿಗರ್ ಮಾಡಲಾಗಿಲ್ಲ' });
+            controller.close();
+            return;
+          }
           const sarvamResult = await sarvamGenerate(
             caseSummary, officerAnswers, officerProfile, sarvamKey
           );
           generatedText = sarvamResult.content;
           modelUsed = SARVAM_MODEL_ID;
           send('chunk', { text: generatedText });
-        } else if (anthropicKey) {
-          // Full path: Claude Sonnet with SSE + prompt caching + 120s timeout
+
+        } else if (selectedModel === 'anthropic') {
+          // Anthropic Claude Sonnet
+          if (!anthropicKey) {
+            send('error', { message: 'Anthropic API key not configured / Anthropic API ಕೀ ಕಾನ್ಫಿಗರ್ ಮಾಡಲಾಗಿಲ್ಲ' });
+            controller.close();
+            return;
+          }
           const timeoutPromise = new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error('Generation timeout after 120 seconds')), GENERATION_TIMEOUT_MS)
           );
@@ -287,30 +304,46 @@ export async function POST(request: NextRequest): Promise<Response> {
             generateWithClaude(anthropicKey, officerProfile, references ?? [], redactedCaseSummary, redactedAnswers, send, personalPrompt),
             timeoutPromise,
           ]);
-
           const { result: reinjected, anomalies } = reInjectPII(result.text, piiMap);
           generatedText = reinjected;
           cachedTokens = result.cachedTokens;
           inputTokens = result.inputTokens;
           outputTokens = result.outputTokens;
-
           if (anomalies.length > 0) {
             await logError({
-              message: `PII re-injection anomaly: ${anomalies.length} unmatched placeholder(s): ${anomalies.join(', ')}`,
+              message: `PII re-injection anomaly: ${anomalies.length} placeholder(s): ${anomalies.join(', ')}`,
               route: '/api/pipeline/generate',
               userId,
               severity: 'WARNING',
               metadata: { anomalies },
             });
-            // Append visible warning for officer
-            generatedText += [
-              '',
-              '---',
-              '⚠️ ಗಮನಿಸಿ / NOTE: The following placeholders need manual replacement:',
-              anomalies.join(', '),
-              '---',
-            ].join('\n');
+            generatedText += ['', '---', 'NOTE: Manual replacement needed:', anomalies.join(', '), '---'].join('\n');
           }
+
+        } else if (selectedModel === 'openrouter') {
+          // OpenRouter — Claude Sonnet via OpenAI-compatible API
+          const openrouterKey = process.env.OPENROUTER_API_KEY;
+          if (!openrouterKey) {
+            send('error', { message: 'OpenRouter API key not configured / OpenRouter API ಕೀ ಕಾನ್ಫಿಗರ್ ಮಾಡಲಾಗಿಲ್ಲ' });
+            controller.close();
+            return;
+          }
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Generation timeout after 120 seconds')), GENERATION_TIMEOUT_MS)
+          );
+          const result = await Promise.race([
+            generateWithOpenRouter(openrouterKey, officerProfile, references ?? [], redactedCaseSummary, redactedAnswers, send, personalPrompt),
+            timeoutPromise,
+          ]);
+          const { result: reinjected, anomalies } = reInjectPII(result.text, piiMap);
+          generatedText = reinjected;
+          inputTokens = result.inputTokens;
+          outputTokens = result.outputTokens;
+          modelUsed = result.modelUsed;
+          if (anomalies.length > 0) {
+            generatedText += ['', '---', 'NOTE: Manual replacement needed:', anomalies.join(', '), '---'].join('\n');
+          }
+
         } else {
           send('error', { message: 'AI ಸೇವೆ ಲಭ್ಯವಿಲ್ಲ / AI service unavailable' });
           controller.close();
@@ -508,6 +541,62 @@ async function generateWithClaude(
   }, 3, 30_000); // 30s delay matches UI countdown
 
   return { text: fullText, cachedTokens, inputTokens, outputTokens };
+}
+
+// ── OpenRouter generation (Claude Sonnet via OpenAI-compatible API) ──────────
+
+async function generateWithOpenRouter(
+  apiKey: string,
+  profile: OfficerProfile,
+  references: ReferenceOrder[],
+  caseSummary: CaseSummary,
+  answers: OfficerAnswers,
+  send: (event: string, data: unknown) => void,
+  personalPrompt?: string
+): Promise<{ text: string; inputTokens: number; outputTokens: number; modelUsed: string }> {
+  const OPENROUTER_MODEL = 'anthropic/claude-sonnet-4-6';
+
+  const client = new OpenAI({
+    apiKey,
+    baseURL: 'https://openrouter.ai/api/v1',
+    defaultHeaders: {
+      'HTTP-Referer': 'https://aadesh-ai.in',
+      'X-Title': 'Aadesh AI',
+    },
+  });
+
+  const { messages } = buildPrompt(profile, references, caseSummary, answers, personalPrompt);
+
+  // Convert to OpenAI message format
+  const openaiMessages = messages.map(m => ({
+    role: m.role as 'user' | 'assistant',
+    content: m.content.map(c => c.text).join(''),
+  }));
+
+  let fullText = '';
+  let inputTokens = 0;
+  let outputTokens = 0;
+
+  const stream = await client.chat.completions.create({
+    model: OPENROUTER_MODEL,
+    max_tokens: MAX_TOKENS,
+    messages: openaiMessages,
+    stream: true,
+  });
+
+  for await (const chunk of stream) {
+    const delta = chunk.choices[0]?.delta?.content ?? '';
+    if (delta) {
+      fullText += delta;
+      send('chunk', { text: delta });
+    }
+    if (chunk.usage) {
+      inputTokens = chunk.usage.prompt_tokens ?? 0;
+      outputTokens = chunk.usage.completion_tokens ?? 0;
+    }
+  }
+
+  return { text: fullText, inputTokens, outputTokens, modelUsed: OPENROUTER_MODEL };
 }
 
 // ── Regeneration with correction (no streaming) ───────────────────────────────

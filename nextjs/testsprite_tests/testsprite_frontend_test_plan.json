@@ -1,0 +1,1831 @@
+[
+  {
+    "id": "TC001",
+    "title": "Landing page loads primary content and can navigate to registration",
+    "description": "Verifies the landing page shows hero and feature content and the primary CTA navigates to registration.",
+    "category": "Landing Page",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Scroll to the feature cards section"
+      },
+      {
+        "type": "action",
+        "description": "Click the primary call-to-action to get started"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the registration page is displayed"
+      }
+    ]
+  },
+  {
+    "id": "TC002",
+    "title": "Landing page language toggle switches content to English",
+    "description": "Verifies toggling language updates landing page content from Kannada to English.",
+    "category": "Landing Page",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Toggle the site language to English"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the landing page content is displayed in English"
+      }
+    ]
+  },
+  {
+    "id": "TC003",
+    "title": "Landing page pricing section displays 4 packs",
+    "description": "Verifies the pricing section is present and shows four pricing packs.",
+    "category": "Landing Page",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Scroll to the pricing section"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify 4 pricing packs are displayed"
+      }
+    ]
+  },
+  {
+    "id": "TC004",
+    "title": "Landing page can navigate to login",
+    "description": "Verifies the landing page provides a login entry point and it navigates to the login page.",
+    "category": "Landing Page",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Click the login entry point"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the login page is displayed"
+      }
+    ]
+  },
+  {
+    "id": "TC005",
+    "title": "Landing page renders without broken images",
+    "description": "Verifies images on the landing page render successfully without broken placeholders.",
+    "category": "Landing Page",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Scroll through the full landing page"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify no broken images are visible on the page"
+      }
+    ]
+  },
+  {
+    "id": "TC006",
+    "title": "Registration succeeds with valid inputs and shows email verification prompt",
+    "description": "Verifies a user can submit the registration form with valid details and see a verification prompt.",
+    "category": "User Registration",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/register"
+      },
+      {
+        "type": "action",
+        "description": "Fill a full name into the name field"
+      },
+      {
+        "type": "action",
+        "description": "Fill a unique email address into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill a valid password into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the registration form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a success confirmation with an email verification prompt is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC007",
+    "title": "Registration shows validation errors on empty submit then allows correction",
+    "description": "Verifies required-field validation appears when submitting an empty form and clears after correcting inputs and resubmitting.",
+    "category": "User Registration",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/register"
+      },
+      {
+        "type": "action",
+        "description": "Submit the registration form"
+      },
+      {
+        "type": "action",
+        "description": "Fill a full name into the name field"
+      },
+      {
+        "type": "action",
+        "description": "Fill a unique email address into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill a valid password into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the registration form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a success confirmation with an email verification prompt is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC008",
+    "title": "Registration blocks invalid email format",
+    "description": "Verifies the registration form shows a validation error when the email format is invalid.",
+    "category": "User Registration",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/register"
+      },
+      {
+        "type": "action",
+        "description": "Fill a full name into the name field"
+      },
+      {
+        "type": "action",
+        "description": "Fill invalid text into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill a valid password into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the registration form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify an email validation error is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC009",
+    "title": "Registration blocks weak password",
+    "description": "Verifies the registration form shows a validation error when the password does not meet requirements.",
+    "category": "User Registration",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/register"
+      },
+      {
+        "type": "action",
+        "description": "Fill a full name into the name field"
+      },
+      {
+        "type": "action",
+        "description": "Fill a unique email address into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill a weak password into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the registration form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a password validation error is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC010",
+    "title": "Login succeeds with valid credentials and lands on dashboard",
+    "description": "Verifies email/password login completes and the user reaches the authenticated dashboard.",
+    "category": "User Login",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the user lands on the dashboard"
+      }
+    ]
+  },
+  {
+    "id": "TC011",
+    "title": "Login shows loading state during authentication",
+    "description": "Verifies submitting login shows a loading spinner while authentication is in progress.",
+    "category": "User Login",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a loading spinner is displayed during authentication"
+      }
+    ]
+  },
+  {
+    "id": "TC012",
+    "title": "Login shows error for invalid credentials",
+    "description": "Verifies login failure displays a Kannada error message when password is incorrect.",
+    "category": "User Login",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill an incorrect password into the password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify an invalid-credentials error message is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC013",
+    "title": "Login form validates required fields",
+    "description": "Verifies submitting the login form with empty inputs shows validation errors.",
+    "category": "User Login",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify required-field validation errors are visible"
+      }
+    ]
+  },
+  {
+    "id": "TC014",
+    "title": "Login page can navigate to password reset",
+    "description": "Verifies the forgot-password link routes to the password reset request page.",
+    "category": "User Login",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Click the forgot-password link"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the password reset request page is displayed"
+      }
+    ]
+  },
+  {
+    "id": "TC015",
+    "title": "Login page can navigate to sign up",
+    "description": "Verifies the sign-up link routes to the registration page.",
+    "category": "User Login",
+    "priority": "Low",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Click the sign-up link to register"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the registration page is displayed"
+      }
+    ]
+  },
+  {
+    "id": "TC016",
+    "title": "Dashboard loads with greeting, stats, and navigation to Generate Order",
+    "description": "Verifies an authenticated user can load the dashboard, see primary content, and navigate to the generate order page from a quick action.",
+    "category": "Dashboard",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /app"
+      },
+      {
+        "type": "action",
+        "description": "Click the Generate Order quick action"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the order generation page is displayed"
+      }
+    ]
+  },
+  {
+    "id": "TC017",
+    "title": "Unauthenticated access to Dashboard redirects to login",
+    "description": "Verifies that visiting the dashboard route while logged out sends the user to the login page and shows the login form.",
+    "category": "Dashboard",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /app"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the login form is displayed"
+      }
+    ]
+  },
+  {
+    "id": "TC018",
+    "title": "Dashboard shows credit warning when credits are zero",
+    "description": "Verifies the dashboard can display a credit warning state for a user with no remaining credits.",
+    "category": "Dashboard",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /app"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a credit warning is visible when credits are empty"
+      }
+    ]
+  },
+  {
+    "id": "TC019",
+    "title": "Dashboard shows first-time user call-to-action when no orders and no files",
+    "description": "Verifies the dashboard displays a first-time user CTA state when the account has no order history and no uploaded files.",
+    "category": "Dashboard",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /app"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a first-time user call-to-action is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC020",
+    "title": "Dashboard quick action navigates to AI Training page",
+    "description": "Verifies the Train AI quick action from the dashboard takes the user to the training upload page.",
+    "category": "Dashboard",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /app"
+      },
+      {
+        "type": "action",
+        "description": "Click Train AI quick action"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the AI training page is displayed"
+      }
+    ]
+  },
+  {
+    "id": "TC021",
+    "title": "Dashboard quick action navigates to Billing page",
+    "description": "Verifies the Buy Credits quick action from the dashboard takes the user to the billing page.",
+    "category": "Dashboard",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /app"
+      },
+      {
+        "type": "action",
+        "description": "Click Buy Credits quick action"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the billing page is displayed"
+      }
+    ]
+  },
+  {
+    "id": "TC022",
+    "title": "Generate Order page blocks generation when required fields are missing",
+    "description": "Verifies the generate order form validates required inputs and does not proceed with generation when key fields are empty.",
+    "category": "Generate Order",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /app/generate"
+      },
+      {
+        "type": "action",
+        "description": "Submit the generate order request"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a form validation error is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC023",
+    "title": "Generate Order happy path using manual inputs shows generated text and enables downloads after verification",
+    "description": "Verifies a user can fill required inputs, generate an order, see generated Kannada text, and enable download controls by completing verification.",
+    "category": "Generate Order",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /app/generate"
+      },
+      {
+        "type": "action",
+        "description": "Select an order type"
+      },
+      {
+        "type": "action",
+        "description": "Fill CASE-12345 into the case number field"
+      },
+      {
+        "type": "action",
+        "description": "Fill 42 into the survey number field"
+      },
+      {
+        "type": "action",
+        "description": "Fill Test Village into the village name field"
+      },
+      {
+        "type": "action",
+        "description": "Fill Test Appellant into the appellant name field"
+      },
+      {
+        "type": "action",
+        "description": "Fill a detailed case summary into the case details field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the generate order request"
+      },
+      {
+        "type": "action",
+        "description": "Wait for the generation to complete"
+      },
+      {
+        "type": "action",
+        "description": "Check the verification checkbox to enable downloads"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify generated Kannada order text is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify download actions are enabled"
+      }
+    ]
+  },
+  {
+    "id": "TC024",
+    "title": "Generate Order shows progress indicator during generation",
+    "description": "Verifies that a progress timer or indicator appears while AI generation is running.",
+    "category": "Generate Order",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /app/generate"
+      },
+      {
+        "type": "action",
+        "description": "Select an order type"
+      },
+      {
+        "type": "action",
+        "description": "Fill CASE-12346 into the case number field"
+      },
+      {
+        "type": "action",
+        "description": "Fill 43 into the survey number field"
+      },
+      {
+        "type": "action",
+        "description": "Fill Test Village 2 into the village name field"
+      },
+      {
+        "type": "action",
+        "description": "Fill Test Appellant 2 into the appellant name field"
+      },
+      {
+        "type": "action",
+        "description": "Fill a detailed case summary into the case details field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the generate order request"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a generation progress indicator is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC025",
+    "title": "Generate Order displays guardrail validation results after generation",
+    "description": "Verifies that guardrail/validation results are shown after an order is generated.",
+    "category": "Generate Order",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /app/generate"
+      },
+      {
+        "type": "action",
+        "description": "Select an order type"
+      },
+      {
+        "type": "action",
+        "description": "Fill CASE-12347 into the case number field"
+      },
+      {
+        "type": "action",
+        "description": "Fill 44 into the survey number field"
+      },
+      {
+        "type": "action",
+        "description": "Fill Test Village 3 into the village name field"
+      },
+      {
+        "type": "action",
+        "description": "Fill Test Appellant 3 into the appellant name field"
+      },
+      {
+        "type": "action",
+        "description": "Fill a detailed case summary into the case details field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the generate order request"
+      },
+      {
+        "type": "action",
+        "description": "Wait for the generation to complete"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify guardrail validation results are displayed"
+      }
+    ]
+  },
+  {
+    "id": "TC026",
+    "title": "Generate Order allows regenerate after an initial generation completes",
+    "description": "Verifies the regenerate action produces a new generated output state after a completed generation.",
+    "category": "Generate Order",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /app/generate"
+      },
+      {
+        "type": "action",
+        "description": "Select an order type"
+      },
+      {
+        "type": "action",
+        "description": "Fill CASE-12348 into the case number field"
+      },
+      {
+        "type": "action",
+        "description": "Fill 45 into the survey number field"
+      },
+      {
+        "type": "action",
+        "description": "Fill Test Village 4 into the village name field"
+      },
+      {
+        "type": "action",
+        "description": "Fill Test Appellant 4 into the appellant name field"
+      },
+      {
+        "type": "action",
+        "description": "Fill a detailed case summary into the case details field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the generate order request"
+      },
+      {
+        "type": "action",
+        "description": "Wait for the generation to complete"
+      },
+      {
+        "type": "action",
+        "description": "Click the regenerate action"
+      },
+      {
+        "type": "action",
+        "description": "Wait for the generation to complete"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify generated Kannada order text is displayed"
+      }
+    ]
+  },
+  {
+    "id": "TC027",
+    "title": "AI Training page loads and shows upload zone and training status",
+    "description": "Verifies the training page primary UI is present for an authenticated user.",
+    "category": "AI Training",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /app/train"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a training file upload zone is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a training status summary is displayed"
+      }
+    ]
+  },
+  {
+    "id": "TC028",
+    "title": "AI Training rejects unsupported file types",
+    "description": "Verifies the training upload validates file types and shows an error when an unsupported type is added.",
+    "category": "AI Training",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /app/train"
+      },
+      {
+        "type": "action",
+        "description": "Attempt to add an unsupported file type to the training upload zone"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a file type validation error is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify no new file appears in the training files table"
+      }
+    ]
+  },
+  {
+    "id": "TC029",
+    "title": "AI Training upload multiple files shows pipeline progress and file rows",
+    "description": "Verifies adding multiple supported files starts the upload pipeline and displays rows with statuses.",
+    "category": "AI Training",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /app/train"
+      },
+      {
+        "type": "action",
+        "description": "Add multiple supported training files to the upload zone"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify an upload pipeline progress display is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the training files table shows new file entries"
+      }
+    ]
+  },
+  {
+    "id": "TC030",
+    "title": "AI Training delete a file and confirm removal",
+    "description": "Verifies a user can delete an uploaded training file via confirmation dialog and the file disappears from the table.",
+    "category": "AI Training",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /app/train"
+      },
+      {
+        "type": "action",
+        "description": "Add one supported training file to the upload zone"
+      },
+      {
+        "type": "action",
+        "description": "Wait for the file to appear in the training files table"
+      },
+      {
+        "type": "action",
+        "description": "Click the delete action for the uploaded file"
+      },
+      {
+        "type": "action",
+        "description": "Confirm deletion in the dialog"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the deleted file no longer appears in the training files table"
+      }
+    ]
+  },
+  {
+    "id": "TC031",
+    "title": "Billing page shows pricing packs",
+    "description": "Verifies authenticated users can load the billing page and see the available credit packs with INR pricing.",
+    "category": "Billing and Credits",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /app/billing"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify 4 pricing packs are displayed with INR prices"
+      }
+    ]
+  },
+  {
+    "id": "TC032",
+    "title": "Start Razorpay checkout from a selected pack",
+    "description": "Verifies a user can initiate the checkout flow by selecting a pricing pack.",
+    "category": "Billing and Credits",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /app/billing"
+      },
+      {
+        "type": "action",
+        "description": "Click the buy action for a pricing pack"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the Razorpay checkout modal is displayed"
+      }
+    ]
+  },
+  {
+    "id": "TC033",
+    "title": "Close checkout without completing payment",
+    "description": "Verifies a user can exit the checkout modal and remain on the billing page without a success state.",
+    "category": "Billing and Credits",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /app/billing"
+      },
+      {
+        "type": "action",
+        "description": "Click the buy action for a pricing pack"
+      },
+      {
+        "type": "action",
+        "description": "Close the checkout modal"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the billing page is displayed with pricing packs available"
+      }
+    ]
+  },
+  {
+    "id": "TC034",
+    "title": "Attempt to buy multiple times while checkout is open",
+    "description": "Verifies the UI prevents opening overlapping checkout modals or duplicating the checkout surface.",
+    "category": "Billing and Credits",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /app/billing"
+      },
+      {
+        "type": "action",
+        "description": "Click the buy action for a pricing pack"
+      },
+      {
+        "type": "action",
+        "description": "Click the buy action for a different pricing pack"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify only one checkout modal is displayed"
+      }
+    ]
+  },
+  {
+    "id": "TC035",
+    "title": "Registration page loads and shows registration form",
+    "description": "Verifies the registration page loads and presents the registration form fields for new users.",
+    "category": "My Orders",
+    "priority": "Low",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/register"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the registration form is displayed"
+      }
+    ]
+  },
+  {
+    "id": "TC036",
+    "title": "My Orders page loads and shows orders list or empty state",
+    "description": "Verifies authenticated users can load My Orders and see either a list of orders or an empty state message.",
+    "category": "My Orders",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /app/my-orders"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify an orders list is displayed or an empty state message is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC037",
+    "title": "Open an order from My Orders list to view details",
+    "description": "Verifies a user can open an order from the list and see its details view.",
+    "category": "My Orders",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /app/my-orders"
+      },
+      {
+        "type": "action",
+        "description": "Click an order in the orders list"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify order details are displayed"
+      }
+    ]
+  },
+  {
+    "id": "TC038",
+    "title": "Download an order as DOCX from order details",
+    "description": "Verifies the order details view exposes a DOCX download action.",
+    "category": "My Orders",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /app/my-orders"
+      },
+      {
+        "type": "action",
+        "description": "Click an order in the orders list"
+      },
+      {
+        "type": "action",
+        "description": "Click the action to download the order as DOCX"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a DOCX download is initiated"
+      }
+    ]
+  },
+  {
+    "id": "TC039",
+    "title": "Search for a non-existent order shows no-results state",
+    "description": "Verifies searching for an order that does not exist results in a no-results empty state.",
+    "category": "My Orders",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /app/my-orders"
+      },
+      {
+        "type": "action",
+        "description": "Fill a unique non-existent query into the order search field with text NON_EXISTENT_ORDER_123456"
+      },
+      {
+        "type": "action",
+        "description": "Press Enter"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a no-results state is displayed"
+      }
+    ]
+  },
+  {
+    "id": "TC040",
+    "title": "Upload page loads and shows upload zone and file list area",
+    "description": "Verifies authenticated users can load the upload page and see the upload zone and file list section.",
+    "category": "File Storage",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /app/upload"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify an upload zone is displayed and a file list section is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC041",
+    "title": "Cancel deletion keeps file in list",
+    "description": "Verifies cancelling deletion in the confirmation dialog does not remove the file from the list.",
+    "category": "File Storage",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /app/upload"
+      },
+      {
+        "type": "action",
+        "description": "Wait for the file list to load"
+      },
+      {
+        "type": "action",
+        "description": "Click the delete action for a file in the list"
+      },
+      {
+        "type": "action",
+        "description": "Cancel deletion in the confirmation dialog"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the file remains in the file list"
+      }
+    ]
+  },
+  {
+    "id": "TC042",
+    "title": "Delete a file removes it from the list",
+    "description": "Verifies confirming deletion removes the file entry from the UI list.",
+    "category": "File Storage",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /app/upload"
+      },
+      {
+        "type": "action",
+        "description": "Wait for the file list to load"
+      },
+      {
+        "type": "action",
+        "description": "Record the name of the first file in the list"
+      },
+      {
+        "type": "action",
+        "description": "Click the delete action for that file"
+      },
+      {
+        "type": "action",
+        "description": "Confirm deletion in the confirmation dialog"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the recorded file name is not present in the file list"
+      }
+    ]
+  },
+  {
+    "id": "TC043",
+    "title": "Download an uploaded file from the list",
+    "description": "Verifies the file list provides a download action that initiates a download for a file.",
+    "category": "File Storage",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /app/upload"
+      },
+      {
+        "type": "action",
+        "description": "Wait for the file list to load"
+      },
+      {
+        "type": "action",
+        "description": "Click the download action for a file in the list"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a file download is initiated"
+      }
+    ]
+  },
+  {
+    "id": "TC044",
+    "title": "User Settings: update profile settings and save",
+    "description": "Verifies an authenticated user can navigate to user settings, update profile details, save, and see a confirmation.",
+    "category": "User Settings",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /app/user-settings"
+      },
+      {
+        "type": "action",
+        "description": "Fill a new valid value into the profile name field"
+      },
+      {
+        "type": "action",
+        "description": "Save the profile changes"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a success confirmation is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the updated profile name is displayed"
+      }
+    ]
+  },
+  {
+    "id": "TC045",
+    "title": "User Settings: view account information loads",
+    "description": "Verifies the user settings page loads and shows account information for an authenticated user.",
+    "category": "User Settings",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /app/user-settings"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify account information is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify profile settings controls are available"
+      }
+    ]
+  },
+  {
+    "id": "TC046",
+    "title": "User Settings: change password with incorrect current password shows validation error",
+    "description": "Verifies changing password fails with an incorrect current password and shows a validation error without updating the password.",
+    "category": "User Settings",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /app/user-settings"
+      },
+      {
+        "type": "action",
+        "description": "Fill an incorrect value into the current password field"
+      },
+      {
+        "type": "action",
+        "description": "Fill a valid new password into the new password field"
+      },
+      {
+        "type": "action",
+        "description": "Fill the same valid new password into the confirm new password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the password change"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a password validation error is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC047",
+    "title": "User Settings: password confirmation mismatch blocks submission",
+    "description": "Verifies the UI prevents password change when new password and confirmation do not match.",
+    "category": "User Settings",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /app/user-settings"
+      },
+      {
+        "type": "action",
+        "description": "Fill the current password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill a valid new password into the new password field"
+      },
+      {
+        "type": "action",
+        "description": "Fill a different valid new password into the confirm new password field"
+      },
+      {
+        "type": "action",
+        "description": "Submit the password change"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a password confirmation mismatch error is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC048",
+    "title": "Language Toggle: switch to Kannada on landing and persist across navigation into app pages",
+    "description": "Verifies toggling language to Kannada updates landing content and persists across navigation to generate and billing pages.",
+    "category": "Language Toggle (EN ↔ ಕನ್ನಡ)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Toggle the global language to Kannada"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the landing page primary content is displayed in Kannada"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /app/generate"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify generation form labels or placeholders are displayed in Kannada"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /app/billing"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify billing page content is displayed in Kannada"
+      }
+    ]
+  },
+  {
+    "id": "TC049",
+    "title": "Language Toggle: toggling on billing changes language and does not show error state",
+    "description": "Verifies the language toggle works on billing and no error state appears after toggling.",
+    "category": "Language Toggle (EN ↔ ಕನ್ನಡ)",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /auth/login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /app/billing"
+      },
+      {
+        "type": "action",
+        "description": "Toggle the global language"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the billing page language changes"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify no error state is displayed"
+      }
+    ]
+  }
+]

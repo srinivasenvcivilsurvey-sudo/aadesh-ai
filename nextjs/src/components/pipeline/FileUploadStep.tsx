@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef, useState } from 'react';
-import { Upload, AlertCircle, FileText, ChevronRight } from 'lucide-react';
+import { Upload, AlertCircle, FileText, ChevronRight, CheckCircle2, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { getAuthHeaders } from '@/lib/pipeline/getAuthToken';
@@ -43,6 +43,7 @@ export function FileUploadStep({ dispatch, locale }: FileUploadStepProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [uploadSuccess, setUploadSuccess] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [consentGiven, setConsentGiven] = useState(false);
   const [selectedCaseType, setSelectedCaseType] = useState<string>('');
@@ -71,11 +72,13 @@ export function FileUploadStep({ dispatch, locale }: FileUploadStepProps) {
   // ── Shared file processing logic ───────────────────────────────────────────
   async function processFile(file: File) {
     setError('');
+    setUploadSuccess(false);
 
+    // Client-side checks (fast, no server needed)
     if (file.size > MAX_FILE_SIZE_BYTES) {
       setError(kn
         ? `ಫೈಲ್ ${MAX_FILE_SIZE_MB}MB ಗಿಂತ ದೊಡ್ಡದಾಗಿದೆ / File exceeds ${MAX_FILE_SIZE_MB}MB limit`
-        : `File exceeds ${MAX_FILE_SIZE_MB}MB limit / ಫೈಲ್ ${MAX_FILE_SIZE_MB}MB ಗಿಂತ ದೊಡ್ಡದಾಗಿದೆ`
+        : `File exceeds ${MAX_FILE_SIZE_MB}MB limit`
       );
       return;
     }
@@ -91,63 +94,65 @@ export function FileUploadStep({ dispatch, locale }: FileUploadStepProps) {
     setSelectedFile(file);
     setLoading(true);
 
-    // Hoist base64 so the catch block can use it as a fallback
     let base64 = '';
 
     try {
       base64 = await fileToBase64(file);
-      console.log('[FileUploadStep] base64 ready, size:', base64.length, 'mime:', file.type);
 
-      const headers = await getAuthHeaders();
-      if (!headers) {
-        setError(kn ? 'ಸೆಷನ್ ಮುಕ್ತಾಯ. ಮರುಲಾಗಿನ್ ಮಾಡಿ / Session expired.' : 'Session expired. Please login.');
-        setLoading(false);
-        return;
+      // ── Try server validate, but bypass on server errors ──────────────────
+      let pageCount = 1;
+      try {
+        const headers = await getAuthHeaders();
+        if (headers) {
+          const response = await fetch('/api/pipeline/validate', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ fileBase64: base64, mimeType: file.type, fileName: file.name }),
+          });
+
+          // Only treat as a file problem if it's a 422 (unprocessable) response
+          if (response.status === 422) {
+            const result = await response.json();
+            if (!result.valid) {
+              setError(result.error || (kn ? 'ಫೈಲ್ ಪರಿಶೀಲನೆ ವಿಫಲವಾಯಿತು / Validation failed' : 'Validation failed'));
+              setLoading(false);
+              return;
+            }
+          } else if (response.ok) {
+            const result = await response.json();
+            if (!result.valid) {
+              setError(result.error || (kn ? 'ಫೈಲ್ ಪರಿಶೀಲನೆ ವಿಫಲವಾಯಿತು / Validation failed' : 'Validation failed'));
+              setLoading(false);
+              return;
+            }
+            pageCount = result.pageCount ?? 1;
+          }
+          // else: 401/500/timeout → bypass validate, proceed with reading
+        }
+      } catch {
+        // Network error on validate call — bypass and proceed
       }
 
-      console.log('[FileUploadStep] calling /api/pipeline/validate...');
-      const response = await fetch('/api/pipeline/validate', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ fileBase64: base64, mimeType: file.type, fileName: file.name }),
-      });
-
-      const result = await response.json();
-      console.log('[FileUploadStep] validate result:', result);
-
-      if (!result.valid) {
-        setError(result.error || (kn ? 'ಫೈಲ್ ಪರಿಶೀಲನೆ ವಿಫಲವಾಯಿತು / Validation failed' : 'Validation failed'));
-        setLoading(false);
-        return;
-      }
-
+      // ── Store file data and advance ───────────────────────────────────────
       sessionStorage.setItem('pipeline_file_base64', base64);
       sessionStorage.setItem('pipeline_file_mime', file.type);
-      sessionStorage.setItem('pipeline_file_page_count', String(result.pageCount));
+      sessionStorage.setItem('pipeline_file_page_count', String(pageCount));
       if (selectedCaseType) {
         sessionStorage.setItem('pipeline_case_type_hint', selectedCaseType);
       }
 
-      console.log('[FileUploadStep] validation passed — dispatching SET_STEP:reading');
+      // Brief success flash before navigating
+      setUploadSuccess(true);
+      setLoading(false);
+      await new Promise(r => setTimeout(r, 800));
       dispatch({ type: 'SET_STEP', step: 'reading' });
+
     } catch (err) {
-      console.error('[FileUploadStep] validate error:', err);
-      // If validation itself fails but we have the file data — skip validate, let vision-read handle it
-      if (base64) {
-        sessionStorage.setItem('pipeline_file_base64', base64);
-        sessionStorage.setItem('pipeline_file_mime', file.type);
-        sessionStorage.setItem('pipeline_file_page_count', '1');
-        if (selectedCaseType) {
-          sessionStorage.setItem('pipeline_case_type_hint', selectedCaseType);
-        }
-        dispatch({ type: 'SET_STEP', step: 'reading' });
-        return;
-      }
+      console.error('[FileUploadStep] processFile error:', err);
       setError(kn
-        ? 'ಫೈಲ್ ಪರಿಶೀಲನೆ ವಿಫಲವಾಯಿತು. ದಯವಿಟ್ಟು ಮತ್ತೊಮ್ಮೆ ಪ್ರಯತ್ನಿಸಿ / Validation failed. Please retry.'
-        : 'Validation failed. Please retry.'
+        ? 'ಫೈಲ್ ಓದಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ಮತ್ತೊಮ್ಮೆ ಪ್ರಯತ್ನಿಸಿ / Could not read file. Please retry.'
+        : 'Could not read file. Please retry.'
       );
-    } finally {
       setLoading(false);
     }
   }
@@ -265,41 +270,59 @@ export function FileUploadStep({ dispatch, locale }: FileUploadStepProps) {
         {selectedCaseType && !isSimple && consentGiven && (
           <>
             <div
-              onClick={() => !loading && fileInputRef.current?.click()}
+              onClick={() => !loading && !uploadSuccess && fileInputRef.current?.click()}
               onDragOver={handleDragOver}
               onDragEnter={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
               className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${
-                loading
-                  ? 'border-primary-300 bg-primary-50 cursor-wait'
-                  : isDragging
-                    ? 'border-primary-500 bg-primary-50 scale-[1.01]'
-                    : 'border-gray-300 hover:border-primary-400 cursor-pointer'
+                uploadSuccess
+                  ? 'border-green-400 bg-green-50 cursor-default'
+                  : loading
+                    ? 'border-primary-300 bg-primary-50 cursor-wait'
+                    : isDragging
+                      ? 'border-primary-500 bg-primary-50 scale-[1.01]'
+                      : 'border-gray-300 hover:border-primary-400 cursor-pointer'
               }`}
             >
-              <Upload className={`h-10 w-10 mx-auto mb-3 ${loading ? 'text-primary-400 animate-pulse' : isDragging ? 'text-primary-500' : 'text-gray-400'}`} />
-              {loading ? (
-                <p className="text-sm text-primary-600 font-medium">
-                  {kn ? 'ಪರಿಶೀಲಿಸಲಾಗುತ್ತಿದೆ...' : 'Validating...'}
-                </p>
+              {uploadSuccess ? (
+                <div className="flex flex-col items-center gap-2">
+                  <CheckCircle2 className="h-10 w-10 text-green-500" />
+                  <p className="text-sm font-semibold text-green-700">
+                    {kn ? 'ಫೈಲ್ ಸಿದ್ಧ! AI ಓದಲು ಆರಂಭಿಸುತ್ತಿದೆ...' : 'File ready! Starting AI reading...'}
+                  </p>
+                  <p className="text-xs text-green-600">{selectedFile?.name}</p>
+                </div>
+              ) : loading ? (
+                <div className="flex flex-col items-center gap-2">
+                  <Loader2 className="h-10 w-10 text-primary-500 animate-spin" />
+                  <p className="text-sm text-primary-600 font-medium">
+                    {kn ? 'ಫೈಲ್ ಓದಲಾಗುತ್ತಿದೆ...' : 'Reading file...'}
+                  </p>
+                  {selectedFile && <p className="text-xs text-gray-400">{selectedFile.name}</p>}
+                </div>
               ) : isDragging ? (
-                <p className="text-sm font-medium text-primary-600">
-                  {kn ? 'ಇಲ್ಲಿ ಬಿಡಿ' : 'Drop file here'}
-                </p>
+                <div className="flex flex-col items-center gap-2">
+                  <Upload className="h-10 w-10 text-primary-500" />
+                  <p className="text-sm font-semibold text-primary-600">
+                    {kn ? 'ಇಲ್ಲಿ ಬಿಡಿ' : 'Drop file here'}
+                  </p>
+                </div>
               ) : selectedFile ? (
-                <div>
+                <div className="flex flex-col items-center gap-2">
+                  <Upload className="h-10 w-10 text-gray-400" />
                   <p className="text-sm font-medium text-gray-700">{selectedFile.name}</p>
-                  <p className="text-xs text-gray-400 mt-1">
+                  <p className="text-xs text-gray-400">
                     {kn ? 'ಬೇರೆ ಫೈಲ್ ಆಯ್ಕೆ ಮಾಡಲು ಕ್ಲಿಕ್ ಮಾಡಿ' : 'Click to select a different file'}
                   </p>
                 </div>
               ) : (
-                <div>
-                  <p className="text-sm font-medium text-gray-700">
-                    {kn ? 'ಫೈಲ್ ಎಳೆದು ಬಿಡಿ ಅಥವಾ ಕ್ಲಿಕ್ ಮಾಡಿ' : 'Drag & drop file or click to select'}
+                <div className="flex flex-col items-center gap-2">
+                  <Upload className="h-10 w-10 text-gray-400" />
+                  <p className="text-sm font-semibold text-gray-700">
+                    {kn ? 'ಫೈಲ್ ಎಳೆದು ಬಿಡಿ ಅಥವಾ ಕ್ಲಿಕ್ ಮಾಡಿ' : 'Drag & drop or click to upload'}
                   </p>
-                  <p className="text-xs text-gray-400 mt-1">
+                  <p className="text-xs text-gray-400">
                     {kn ? 'PDF, DOCX, JPG, PNG — ಗರಿಷ್ಠ 200 ಪುಟಗಳು' : 'PDF, DOCX, JPG, PNG — max 200 pages'}
                   </p>
                 </div>
@@ -312,9 +335,11 @@ export function FileUploadStep({ dispatch, locale }: FileUploadStepProps) {
                 onChange={handleFileSelect}
               />
             </div>
-            <p className="text-xs text-gray-400 text-center">
-              {kn ? 'ಫೈಲ್ ಅಪ್\u200Cಲೋಡ್ ಮಾಡಿದ ನಂತರ AI ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಓದುತ್ತದೆ' : 'After upload, AI will automatically read the case file'}
-            </p>
+            {!uploadSuccess && (
+              <p className="text-xs text-gray-400 text-center">
+                {kn ? 'ಫೈಲ್ ಅಪ್\u200Cಲೋಡ್ ಮಾಡಿದ ನಂತರ AI ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಓದುತ್ತದೆ' : 'After upload, AI reads the file automatically'}
+              </p>
+            )}
           </>
         )}
       </CardContent>

@@ -1,0 +1,272 @@
+version: "2"
+type: frontend
+tech_stack:
+  - TypeScript
+  - Next.js 15 (App Router)
+  - React 19
+  - Tailwind CSS
+  - Radix UI
+  - Supabase (auth + storage)
+  - Razorpay (payments)
+  - Recharts
+  - docx (DOCX generation)
+  - jsPDF (PDF generation)
+routes:
+  - path: /
+    file: src/app/page.tsx
+    auth_required: false
+    description: Landing page with Kannada hero, feature cards, pricing, CTA
+  - path: /auth/login
+    file: src/app/auth/login/page.tsx
+    auth_required: false
+    description: Login with email/password, SSO buttons, MFA detection
+  - path: /auth/register
+    file: src/app/auth/register/page.tsx
+    auth_required: false
+    description: New user registration form
+  - path: /auth/2fa
+    file: src/app/auth/2fa/page.tsx
+    auth_required: false
+    description: Two-factor authentication page
+  - path: /auth/forgot-password
+    file: src/app/auth/forgot-password/page.tsx
+    auth_required: false
+    description: Password reset request
+  - path: /auth/verify-email
+    file: src/app/auth/verify-email/page.tsx
+    auth_required: false
+    description: Email verification page
+  - path: /auth/reset-password
+    file: src/app/auth/reset-password/page.tsx
+    auth_required: false
+    description: Password reset confirmation
+  - path: /app
+    file: src/app/app/page.tsx
+    auth_required: true
+    description: Dashboard with stats, greeting, quick actions, credit warnings
+  - path: /app/generate
+    file: src/app/app/generate/page.tsx
+    auth_required: true
+    description: AI order generation - file upload, form, AI output, download
+  - path: /app/train
+    file: src/app/app/train/page.tsx
+    auth_required: true
+    description: Upload training files for AI model improvement
+  - path: /app/billing
+    file: src/app/app/billing/page.tsx
+    auth_required: true
+    description: Purchase credits via Razorpay, 4 pricing packs
+  - path: /app/my-orders
+    file: src/app/app/my-orders/page.tsx
+    auth_required: true
+    description: Order history listing
+  - path: /app/upload
+    file: src/app/app/upload/page.tsx
+    auth_required: true
+    description: File upload and storage management
+  - path: /app/storage
+    file: src/app/app/storage/page.tsx
+    auth_required: true
+    description: Storage management page
+  - path: /app/user-settings
+    file: src/app/app/user-settings/page.tsx
+    auth_required: true
+    description: User account settings
+  - path: /legal
+    file: src/app/legal/page.tsx
+    auth_required: false
+    description: Legal documents listing
+  - path: /legal/[document]
+    file: src/app/legal/[document]/page.tsx
+    auth_required: false
+    description: Dynamic legal document pages
+features:
+  - name: Landing Page
+    description: Public landing page with Kannada text, feature showcase, pricing cards, and CTA buttons
+    files:
+      - src/app/page.tsx
+    entry_route: /
+    user_interactions:
+      - View hero section with Kannada heading
+      - Scroll through feature cards
+      - View pricing section with 4 packs
+      - Click Get Started button to navigate to /auth/register
+      - Click Login button to navigate to /auth/login
+    api_calls: []
+    auth_required: false
+  - name: User Login
+    description: Login with email and password, SSO buttons, MFA detection and routing
+    files:
+      - src/app/auth/login/page.tsx
+    entry_route: /auth/login
+    user_interactions:
+      - Fill email input field
+      - Fill password input field
+      - Click Login button to submit
+      - See loading spinner during authentication
+      - See Kannada error messages on invalid credentials
+      - Click Google SSO button
+      - Click Forgot Password link
+      - Click Sign Up link to register
+    api_calls:
+      - method: POST
+        endpoint: supabase.auth.signInWithPassword
+    auth_required: false
+  - name: User Registration
+    description: New user signup with email and password
+    files:
+      - src/app/auth/register/page.tsx
+    entry_route: /auth/register
+    user_interactions:
+      - Fill name input field
+      - Fill email input field
+      - Fill password input field
+      - Click Register button
+      - See success message with email verification prompt
+    api_calls:
+      - method: POST
+        endpoint: supabase.auth.signUp
+    auth_required: false
+  - name: Dashboard
+    description: Main dashboard with personalized greeting, stats cards, quick actions
+    files:
+      - src/app/app/page.tsx
+    entry_route: /app
+    user_interactions:
+      - View personalized time-based greeting
+      - View stats cards (Orders Generated, Credits Remaining, Files Uploaded)
+      - Click Generate Order quick action
+      - Click Train AI quick action
+      - Click Buy Credits quick action
+      - See credit warning when credits equal 0
+      - See first-time user CTA when no orders and no files
+    api_calls:
+      - method: GET
+        endpoint: /api/orders
+      - method: GET
+        endpoint: /api/files
+    auth_required: true
+  - name: Generate Order
+    description: Core feature - upload case file, fill form, AI generates Kannada order, download DOCX/PDF
+    files:
+      - src/app/app/generate/page.tsx
+    entry_route: /app/generate
+    user_interactions:
+      - Drag and drop case file (DOCX/PDF) into upload zone
+      - Select order type (appeal or suo_motu)
+      - Fill case number input
+      - Fill survey number input
+      - Fill village name input
+      - Fill appellant name input
+      - Type case details in large textarea
+      - Click Generate Order button
+      - Watch progress timer during AI generation
+      - View generated Kannada order text
+      - View guardrail validation results
+      - View word count with color coding
+      - Check verification checkbox to enable downloads
+      - Click Download DOCX button
+      - Click Download PDF button
+      - Click Print button
+      - Click Regenerate button
+    api_calls:
+      - method: POST
+        endpoint: /api/generate-order
+      - method: PUT
+        endpoint: /api/generate-order
+      - method: POST
+        endpoint: /api/download
+    auth_required: true
+  - name: AI Training
+    description: Upload multiple case files to train AI model on user writing style
+    files:
+      - src/app/app/train/page.tsx
+    entry_route: /app/train
+    user_interactions:
+      - Drag and drop multiple files into upload zone
+      - View upload progress with multi-step pipeline display
+      - See file type auto-detection (appeal/suo_motu/dismissed/review)
+      - View file table with status indicators
+      - Click download button on individual file
+      - Click delete button on individual file
+      - Confirm deletion in dialog
+      - View training status bar with file count breakdown
+      - Click link to generate page when 5+ files uploaded
+    api_calls:
+      - method: POST
+        endpoint: /api/upload
+      - method: DELETE
+        endpoint: /api/upload
+      - method: GET
+        endpoint: /api/training-status
+    auth_required: true
+  - name: Billing and Credits
+    description: Purchase order credits via Razorpay with 4 pricing packs
+    files:
+      - src/app/app/billing/page.tsx
+    entry_route: /app/billing
+    user_interactions:
+      - View 4 pricing pack cards with prices in INR
+      - Click Buy button on desired pack
+      - Complete Razorpay checkout modal
+      - See success message with credits added in Kannada
+      - See error message on failed payment
+    api_calls:
+      - method: POST
+        endpoint: /api/razorpay
+      - method: PUT
+        endpoint: /api/razorpay
+    auth_required: true
+  - name: My Orders
+    description: View history of all generated orders
+    files:
+      - src/app/app/my-orders/page.tsx
+    entry_route: /app/my-orders
+    user_interactions:
+      - View list of previously generated orders
+      - Click on order to view details
+      - Download previous order as DOCX/PDF
+    api_calls:
+      - method: GET
+        endpoint: /api/orders
+    auth_required: true
+  - name: File Storage
+    description: Upload, view, and manage files
+    files:
+      - src/app/app/upload/page.tsx
+    entry_route: /app/upload
+    user_interactions:
+      - Drag and drop files into upload zone
+      - View file list with metadata
+      - Click download button on file
+      - Click delete button on file
+      - Confirm deletion in dialog
+    api_calls:
+      - method: POST
+        endpoint: /api/upload
+      - method: DELETE
+        endpoint: /api/upload
+      - method: GET
+        endpoint: /api/files
+    auth_required: true
+  - name: User Settings
+    description: User account settings and preferences
+    files:
+      - src/app/app/user-settings/page.tsx
+    entry_route: /app/user-settings
+    user_interactions:
+      - View account information
+      - Update profile settings
+      - Change password
+    api_calls: []
+    auth_required: true
+known_limitations:
+  - issue: Payment verification previously missing Authorization header, fixed 2026-03-29
+    location: src/app/app/billing/page.tsx
+    impact: Payment verification could fail without Bearer token
+  - issue: File upload progress is simulated based on file size, not real upload speed
+    location: src/app/app/train/page.tsx
+    impact: Progress bar may not reflect actual upload progress
+  - issue: Generation cannot proceed when offline, only banner is shown
+    location: src/app/app/generate/page.tsx
+    impact: Users on poor connections see offline banner but cannot queue work

@@ -29,6 +29,8 @@ export interface CaseSummary {
 
 export type OrderOutcome = 'Allowed' | 'Dismissed' | 'Remanded';
 
+export type SelectedModel = 'sarvam' | 'anthropic' | 'openrouter';
+
 export interface OfficerAnswers {
   outcome: OrderOutcome;
   officerName: string;
@@ -36,6 +38,7 @@ export interface OfficerAnswers {
   relatedCases?: string;      // optional free text
   aiQuestionAnswer: string;   // answer to first AI-generated question (backward compat)
   aiQuestionAnswers?: string[];  // all AI question answers (indices 0-4)
+  selectedModel?: SelectedModel; // AI provider chosen by officer (default: sarvam)
 }
 
 // â”€â”€ Guardrail Result (from Audit Engine) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

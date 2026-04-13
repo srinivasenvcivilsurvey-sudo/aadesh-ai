@@ -1,0 +1,20 @@
+{
+  "status": "commited",
+  "type": "frontend",
+  "scope": "codebase",
+  "localEndpoint": "http://localhost:3000/443",
+  "loginUser": "banu.test@aadesh-ai.in",
+  "loginPassword": "Banu@Aadesh2026",
+  "executionArgs": {
+    "projectName": "aadesh-ai",
+    "projectPath": "C:\\Users\\north\\OneDrive\\Attachments\\Desktop\\Banu\\aadesh-ai\\nextjs",
+    "testIds": [],
+    "additionalInstruction": "IMPORTANT: The app is deployed at https://aadesh-ai.in (NOT localhost). Use https://aadesh-ai.in as the base URL for all tests.\n\nTest login credentials:\n- Email: banu.test@aadesh-ai.in\n- Password: Banu@Aadesh2026\n\nThe app is a bilingual Kannada/English government SaaS application. Most UI text is in Kannada script. The login page is at /auth/login. After login, user is redirected to /app (dashboard).\n\nFor the generate order test, use these test inputs:\n- Order type: appeal\n- Case number: TEST-001\n- Survey number: 45/2\n- Village: ಬೆಂಗಳೂರು\n- Appellant: ರಾಮಯ್ಯ\n- Case details: ಈ ಪ್ರಕರಣದಲ್ಲಿ ಅಪೀಲುದಾರರು ತಮ್ಮ ಭೂಮಿಯ ಮಾಲೀಕತ್ವದ ಬಗ್ಗೆ ಮನವಿ ಸಲ್ಲಿಸಿದ್ದಾರೆ.",
+    "serverMode": "production",
+    "envs": {
+      "API_KEY": "sk-user-zB4eo1067w-YA7HvucUGPbHy2Kcdbq7wyLm9dHXIkDDZxlcCmldy9s0FpYBl1Yn5IoX2-FlI6gwBIEWayqKXTZdMQnNrVHBVD9q44UYoG484aHcLf9u1MJi3BPxZrHmYlm8"
+    }
+  },
+  "serverPort": 51684,
+  "proxy": "http://155c8d1b-df4a-45c5-bc07-a89065b3f570:KtZ1NPdYuyguLcORhvYWgZyXuTwfYt9p@tun.testsprite.com:8080"
+}

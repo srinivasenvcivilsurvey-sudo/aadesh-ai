@@ -5,7 +5,7 @@ import { AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { validateAnswers } from '@/lib/pipeline/validateAnswers';
-import type { PipelineAction, OfficerAnswers, OrderOutcome } from '@/lib/pipeline/types';
+import type { PipelineAction, OfficerAnswers, OrderOutcome, SelectedModel } from '@/lib/pipeline/types';
 
 interface QuestionsStepProps {
   dispatch: React.Dispatch<PipelineAction>;
@@ -30,6 +30,7 @@ export function QuestionsStep({
   const [relatedCases, setRelatedCases] = useState('');
   const [aiAnswer, setAiAnswer] = useState('');
   const [caseDetailsText, setCaseDetailsText] = useState(''); // for simple path
+  const [selectedModel, setSelectedModel] = useState<SelectedModel>('sarvam'); // default: Sarvam AI
   const [errors, setErrors] = useState<string[]>([]);
 
   const aiQuestion = aiQuestions[0] ?? (kn
@@ -51,6 +52,7 @@ export function QuestionsStep({
       relatedCases: relatedCases || undefined,
       // For simple path, case details go into aiQuestionAnswer so Sarvam can use them
       aiQuestionAnswer: isSimplePath ? caseDetailsText : aiAnswer,
+      selectedModel,
     };
 
     const validation = validateAnswers(answers);
@@ -187,6 +189,53 @@ export function QuestionsStep({
             placeholder={kn ? 'ಉತ್ತರ ನಮೂದಿಸಿ...' : 'Enter your answer...'}
             className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
           />
+        </div>
+
+        {/* AI Provider selector */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            {kn ? 'AI ಪೂರೈಕೆದಾರ' : 'AI Provider'}
+          </label>
+          <div className="grid grid-cols-3 gap-2">
+            {([
+              { value: 'sarvam',     labelEn: 'Sarvam AI',   badge: kn ? 'ಉಚಿತ' : 'Free',  badgeColor: 'bg-green-100 text-green-700' },
+              { value: 'anthropic',  labelEn: 'Anthropic',   badge: null, badgeColor: '' },
+              { value: 'openrouter', labelEn: 'OpenRouter',  badge: null, badgeColor: '' },
+            ] as { value: SelectedModel; labelEn: string; badge: string | null; badgeColor: string }[]).map(opt => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setSelectedModel(opt.value)}
+                className={`flex flex-col items-center py-2.5 px-2 rounded-lg border-2 text-xs font-medium transition-colors ${
+                  selectedModel === opt.value
+                    ? 'border-primary-600 bg-primary-50 text-primary-700'
+                    : 'border-gray-200 hover:border-gray-300 text-gray-600'
+                }`}
+              >
+                <span>{opt.labelEn}</span>
+                {opt.badge && (
+                  <span className={`mt-0.5 text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${opt.badgeColor}`}>
+                    {opt.badge}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+          {selectedModel === 'sarvam' && (
+            <p className="text-xs text-gray-400 mt-1.5">
+              {kn ? 'Sarvam 105B — ಶಿಫಾರಸು ಮಾಡಲಾಗಿದೆ (ಉಚಿತ, ವೇಗ)' : 'Sarvam 105B — recommended (free, fast)'}
+            </p>
+          )}
+          {selectedModel === 'anthropic' && (
+            <p className="text-xs text-gray-400 mt-1.5">
+              {kn ? 'Claude Sonnet — ಹೆಚ್ಚು ನಿಖರ, ₹12/ಆದೇಶ' : 'Claude Sonnet — higher accuracy, ₹12/order'}
+            </p>
+          )}
+          {selectedModel === 'openrouter' && (
+            <p className="text-xs text-gray-400 mt-1.5">
+              {kn ? 'OpenRouter — ಹೆಚ್ಚಿನ ಮಾದರಿಗಳ ಪ್ರವೇಶ' : 'OpenRouter — access to multiple models'}
+            </p>
+          )}
         </div>
 
         <button
