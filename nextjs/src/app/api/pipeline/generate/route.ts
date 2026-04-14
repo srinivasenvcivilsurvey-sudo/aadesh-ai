@@ -17,6 +17,7 @@ import { redactPII, reInjectPII } from '@/lib/pipeline/piiRedactor';
 import { checkDailyLimit, formatResetTime } from '@/lib/pipeline/rateLimiter';
 import { logError, logException } from '@/lib/pipeline/errorLogger';
 import { validateEnv } from '@/lib/validateEnv';
+import { checkIpLimit } from '@/lib/ipRateLimiter';
 import type { CaseSummary, OfficerAnswers } from '@/lib/pipeline/types';
 
 const GENERATION_MODEL = 'claude-sonnet-4-6';
@@ -27,6 +28,24 @@ const SIMPLE_CASE_TYPES = ['withdrawal', 'suo_motu'];
 const VALID_CASE_TYPES = ['contested_appeal', 'withdrawal', 'suo_motu', 'appeal', 'contested'];
 
 export async function POST(request: NextRequest): Promise<Response> {
+  // FIX C9: IP rate limit BEFORE auth — prevents unauthenticated flood reaching AI calls
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+    ?? request.headers.get('x-real-ip')
+    ?? '0.0.0.0';
+  const ipCheck = checkIpLimit(ip);
+  if (!ipCheck.allowed) {
+    return new Response(
+      JSON.stringify({ error: 'Too many requests', retryAfterMs: ipCheck.retryAfterMs }),
+      {
+        status: 429,
+        headers: {
+          'Content-Type': 'application/json',
+          'Retry-After': String(Math.ceil(ipCheck.retryAfterMs / 1000)),
+        },
+      }
+    );
+  }
+
   // ── Auth: validate Bearer token (IDOR fix — use token identity, not body.userId) ──
   const authHeader = request.headers.get('Authorization');
   if (!authHeader?.startsWith('Bearer ')) {
@@ -285,23 +304,64 @@ export async function POST(request: NextRequest): Promise<Response> {
             return;
           }
           // FIX C1: use redacted data for Sarvam (same as Anthropic path)
-          const sarvamResult = await sarvamGenerate(
-            redactedCaseSummary, redactedAnswers, officerProfile, sarvamKey
-          );
-          const { result: sarvamReinjected, anomalies: sarvamAnomalies } = reInjectPII(sarvamResult.content, piiMap);
-          generatedText = sarvamReinjected;
-          if (sarvamAnomalies.length > 0) {
+          // FIX A2: wrap in try/catch — fall back to Anthropic if Sarvam fails
+          try {
+            const sarvamResult = await sarvamGenerate(
+              redactedCaseSummary, redactedAnswers, officerProfile, sarvamKey, personalPrompt
+            );
+            const { result: sarvamReinjected, anomalies: sarvamAnomalies } = reInjectPII(sarvamResult.content, piiMap);
+            generatedText = sarvamReinjected;
+            if (sarvamAnomalies.length > 0) {
+              await logError({
+                message: `PII re-injection anomaly (Sarvam): ${sarvamAnomalies.join(', ')}`,
+                route: '/api/pipeline/generate',
+                userId,
+                severity: 'WARNING',
+                metadata: { anomalies: sarvamAnomalies },
+              });
+              generatedText += ['', '---', 'NOTE: Manual replacement needed:', sarvamAnomalies.join(', '), '---'].join('\n');
+            }
+            modelUsed = SARVAM_MODEL_ID;
+            // FIX M6: fake progressive streaming — send in word-groups with delay
+            // (Sarvam returns full text at once; this gives visual streaming UX)
+            {
+              const WORDS_PER_CHUNK = 5;
+              const CHUNK_DELAY_MS = 20;
+              const words = generatedText.split(' ');
+              for (let i = 0; i < words.length; i += WORDS_PER_CHUNK) {
+                const slice = words.slice(i, i + WORDS_PER_CHUNK).join(' ');
+                const textChunk = (i > 0 ? ' ' : '') + slice;
+                send('chunk', { text: textChunk });
+                if (i + WORDS_PER_CHUNK < words.length) {
+                  await new Promise(r => setTimeout(r, CHUNK_DELAY_MS));
+                }
+              }
+            }
+          } catch (sarvamErr) {
+            // FIX A2: Sarvam down → fall back to Anthropic if key available
+            if (!anthropicKey) throw sarvamErr;
             await logError({
-              message: `PII re-injection anomaly (Sarvam): ${sarvamAnomalies.join(', ')}`,
+              message: `Sarvam failed, falling back to Anthropic: ${sarvamErr instanceof Error ? sarvamErr.message : String(sarvamErr)}`,
               route: '/api/pipeline/generate',
               userId,
               severity: 'WARNING',
-              metadata: { anomalies: sarvamAnomalies },
+              metadata: { error: sarvamErr instanceof Error ? sarvamErr.message : String(sarvamErr) },
             });
-            generatedText += ['', '---', 'NOTE: Manual replacement needed:', sarvamAnomalies.join(', '), '---'].join('\n');
+            send('status', { message: 'Sarvam AI ಸಮಸ್ಯೆ — Claude AI ಬಳಸುತ್ತಿದ್ದೇವೆ / Sarvam issue — switching to Claude AI' });
+            const fallbackResult = await generateWithClaude(
+              anthropicKey, officerProfile, references ?? [],
+              redactedCaseSummary, redactedAnswers, send, personalPrompt
+            );
+            const { result: reinjected, anomalies } = reInjectPII(fallbackResult.text, piiMap);
+            generatedText = reinjected;
+            cachedTokens = fallbackResult.cachedTokens;
+            inputTokens = fallbackResult.inputTokens;
+            outputTokens = fallbackResult.outputTokens;
+            modelUsed = GENERATION_MODEL;
+            if (anomalies.length > 0) {
+              generatedText += ['', '---', 'NOTE: Manual replacement needed:', anomalies.join(', '), '---'].join('\n');
+            }
           }
-          modelUsed = SARVAM_MODEL_ID;
-          send('chunk', { text: generatedText });
 
         } else if (selectedModel === 'anthropic') {
           // Anthropic Claude Sonnet

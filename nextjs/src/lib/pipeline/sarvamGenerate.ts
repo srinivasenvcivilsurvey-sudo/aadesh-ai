@@ -33,14 +33,19 @@ export async function sarvamGenerate(
   caseSummary: CaseSummary,
   answers: OfficerAnswers,
   profile: OfficerProfile,
-  apiKey: string
+  apiKey: string,
+  personalPrompt?: string
 ): Promise<SarvamGenerateResult> {
-  const systemPrompt = buildSystemPrompt({
+  // FIX M5: personal_prompt is ADDITIVE — appended after base system prompt.
+  const baseSystemPrompt = buildSystemPrompt({
     officerName: answers.officerName,
     districtAndCity: profile.districtAndCity ?? profile.district,
     officerSalutation: profile.salutation,
     officerQualifications: profile.designation,
   });
+  const systemPrompt = personalPrompt?.trim()
+    ? `${baseSystemPrompt}\n\n═══ ವೈಯಕ್ತಿಕ ಶೈಲಿ ಸೂಚನೆಗಳು (Personal Style Instructions) ═══\n${personalPrompt.trim()}`
+    : baseSystemPrompt;
 
   const caseDetails = buildSimpleCaseDetails(caseSummary, answers);
 

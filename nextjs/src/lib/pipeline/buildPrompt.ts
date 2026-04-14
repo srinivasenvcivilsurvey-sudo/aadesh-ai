@@ -59,15 +59,17 @@ export function buildPrompt(
   personalPrompt?: string
 ): BuiltPrompt {
   // ── 1. System Prompt (CACHED) ──────────────────────────────────────────────
-  // FIX 2026-04-12: Use personal_prompt if available (auto-generated from officer's own orders)
+  // FIX M5: personal_prompt is ADDITIVE — appended after base system prompt, not a replacement.
+  // Replacing the base prompt strips all 7 guardrails and 64 terminology rules.
+  const baseSystemPrompt = buildSystemPrompt({
+    officerName: profile.officerName,
+    districtAndCity: profile.districtAndCity ?? `${profile.district}`,
+    officerSalutation: profile.salutation,
+    officerQualifications: profile.designation,
+  });
   const systemPromptText = personalPrompt?.trim()
-    ? personalPrompt
-    : buildSystemPrompt({
-        officerName: profile.officerName,
-        districtAndCity: profile.districtAndCity ?? `${profile.district}`,
-        officerSalutation: profile.salutation,
-        officerQualifications: profile.designation,
-      });
+    ? `${baseSystemPrompt}\n\n═══ ವೈಯಕ್ತಿಕ ಶೈಲಿ ಸೂಚನೆಗಳು (Personal Style Instructions) ═══\n${personalPrompt.trim()}`
+    : baseSystemPrompt;
 
   const systemPromptBlock: AnthropicContentBlock = {
     type: 'text',

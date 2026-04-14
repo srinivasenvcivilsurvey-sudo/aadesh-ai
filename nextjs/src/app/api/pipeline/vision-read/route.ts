@@ -21,6 +21,7 @@ import { createClient } from '@supabase/supabase-js';
 import type { CaseSummary, VisionReadResponse } from '@/lib/pipeline/types';
 import mammoth from 'mammoth';
 import { checkDailyLimit, formatResetTime } from '@/lib/pipeline/rateLimiter';
+import { checkIpLimit } from '@/lib/ipRateLimiter';
 
 const VISION_MODEL = 'claude-sonnet-4-6';
 const VISION_TIMEOUT_MS = 60_000;
@@ -62,7 +63,19 @@ function isRateLimitError(err: unknown): boolean {
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  // â”€â”€ Auth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // FIX C9: IP rate limit BEFORE auth
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+    ?? request.headers.get('x-real-ip')
+    ?? '0.0.0.0';
+  const ipCheck = checkIpLimit(ip);
+  if (!ipCheck.allowed) {
+    return NextResponse.json(
+      { error: 'Too many requests', retryAfterMs: ipCheck.retryAfterMs },
+      { status: 429, headers: { 'Retry-After': String(Math.ceil(ipCheck.retryAfterMs / 1000)) } }
+    );
+  }
+
+  // ── Auth ──────────────────────────────────────────────────────────────────────
   const authHeader = request.headers.get('Authorization');
   if (!authHeader?.startsWith('Bearer ')) {
     return NextResponse.json({ error: 'à²…à²¨à²§à²¿à²•à³ƒà²¤ / Unauthorized' }, { status: 401 });
