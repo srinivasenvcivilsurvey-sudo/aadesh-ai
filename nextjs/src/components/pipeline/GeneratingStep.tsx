@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Loader2, AlertCircle, RefreshCw } from 'lucide-react';
+import Link from 'next/link';
+import { Loader2, AlertCircle, RefreshCw, CreditCard } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { getAuthToken } from '@/lib/pipeline/getAuthToken';
@@ -21,7 +22,9 @@ interface GeneratingStepProps {
 export function GeneratingStep({ dispatch, locale, state, userId, onComplete }: GeneratingStepProps) {
   const kn = locale === 'kn';
   const [streamText, setStreamText] = useState('');
+  const [statusMessage, setStatusMessage] = useState(''); // FIX B9: Sarvam→Claude fallback status
   const [error, setError] = useState('');
+  const [isCreditsError, setIsCreditsError] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [countdown, setCountdown] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
@@ -94,6 +97,11 @@ export function GeneratingStep({ dispatch, locale, state, userId, onComplete }: 
             try {
               const data = JSON.parse(line.slice(6));
 
+              if (currentEvent === 'status' && data.message) {
+                // FIX B9: show Sarvam→Claude fallback message so officer isn't left with blank spinner
+                setStatusMessage(data.message);
+              }
+
               if (currentEvent === 'chunk' && data.text) {
                 fullText += data.text;
                 setStreamText(prev => prev + data.text);
@@ -121,6 +129,7 @@ export function GeneratingStep({ dispatch, locale, state, userId, onComplete }: 
 
               if (currentEvent === 'error') {
                 if (data.code === 'NO_CREDITS') {
+                  setIsCreditsError(true);
                   setError(kn
                     ? 'ಕ್ರೆಡಿಟ್‌ಗಳು ಖಾಲಿಯಾಗಿವೆ. ದಯವಿಟ್ಟು ರೀಚಾರ್ಜ್ ಮಾಡಿ'
                     : 'No credits remaining. Please recharge.'
@@ -133,7 +142,7 @@ export function GeneratingStep({ dispatch, locale, state, userId, onComplete }: 
                 return;
               }
             } catch {
-              // Skip malformed SSE data lines
+              // Skip malformed SSE data lines — partial chunks are normal during streaming
             }
           } else if (line === '') {
             // Empty line resets event type
@@ -212,23 +221,35 @@ export function GeneratingStep({ dispatch, locale, state, userId, onComplete }: 
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>{error}</AlertDescription>
           </Alert>
-          {retryCount < MAX_RETRIES && (
-            <button
-              onClick={() => { hasStarted.current = false; startGeneration(retryCount + 1); }}
-              className="w-full py-3 px-4 btn-primary rounded-lg font-medium flex items-center justify-center gap-2"
+          {isCreditsError ? (
+            <Link
+              href="/app/billing"
+              className="w-full py-3 px-4 bg-[#E97B3B] hover:bg-[#BF360C] text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors"
             >
-              <RefreshCw className="h-4 w-4" />
-              {kn ? 'ಮತ್ತೊಮ್ಮೆ ಪ್ರಯತ್ನಿಸಿ' : 'Retry'}
-            </button>
-          )}
-          {retryCount >= MAX_RETRIES && (
-            <button
-              onClick={() => { hasStarted.current = false; setRetryCount(0); startGeneration(1); }}
-              className="w-full py-3 px-4 btn-primary rounded-lg font-medium flex items-center justify-center gap-2"
-            >
-              <RefreshCw className="h-4 w-4" />
-              {kn ? 'ಮತ್ತೊಮ್ಮೆ ಪ್ರಯತ್ನಿಸಿ' : 'Try Again'}
-            </button>
+              <CreditCard className="h-4 w-4" />
+              {kn ? 'ರೀಚಾರ್ಜ್ ಮಾಡಿ →' : 'Recharge Now →'}
+            </Link>
+          ) : (
+            <>
+              {retryCount < MAX_RETRIES && (
+                <button
+                  onClick={() => { hasStarted.current = false; startGeneration(retryCount + 1); }}
+                  className="w-full py-3 px-4 btn-primary rounded-lg font-medium flex items-center justify-center gap-2"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  {kn ? 'ಮತ್ತೊಮ್ಮೆ ಪ್ರಯತ್ನಿಸಿ' : 'Retry'}
+                </button>
+              )}
+              {retryCount >= MAX_RETRIES && (
+                <button
+                  onClick={() => { hasStarted.current = false; setRetryCount(0); startGeneration(1); }}
+                  className="w-full py-3 px-4 btn-primary rounded-lg font-medium flex items-center justify-center gap-2"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  {kn ? 'ಮತ್ತೊಮ್ಮೆ ಪ್ರಯತ್ನಿಸಿ' : 'Try Again'}
+                </button>
+              )}
+            </>
           )}
           <button
             onClick={() => dispatch({ type: 'SET_STEP', step: 'questions' })}
@@ -255,7 +276,7 @@ export function GeneratingStep({ dispatch, locale, state, userId, onComplete }: 
               {kn ? 'ಆದೇಶ ರಚಿಸಲಾಗುತ್ತಿದೆ...' : 'Drafting your order...'}
             </p>
             <p className="text-xs text-gray-400 mt-1">
-              {kn ? 'AI ಸರಕಾರಿ ಕನ್ನಡದಲ್ಲಿ ಬರೆಯುತ್ತಿದೆ' : 'AI is writing in Sarakari Kannada'}
+              {statusMessage || (kn ? 'AI ಸರಕಾರಿ ಕನ್ನಡದಲ್ಲಿ ಬರೆಯುತ್ತಿದೆ' : 'AI is writing in Sarakari Kannada')}
             </p>
           </div>
         </div>

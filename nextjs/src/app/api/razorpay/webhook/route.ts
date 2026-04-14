@@ -135,13 +135,27 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   // ── 7. LOOK UP USER BY EMAIL ────────────────────────────────────────────
-  // FIX (MEDIUM): use getUserByEmail — O(1) vs O(N) listUsers()
-  // FIX (HIGH): note that email comes from Razorpay signed payload — attacker can't forge
-  // the signature, but they COULD enter any email when paying. Credits go to that email's
-  // account. Acceptable risk for payment-link flow; mitigated by amount verification below.
-  // listUsers with email filter — Supabase admin API doesn't have getUserByEmail
-  const { data: { users: matchedUsers }, error: userError } = await adminClient.auth.admin.listUsers({ page: 1, perPage: 1000 });
-  const matchedUser = matchedUsers?.find(u => u.email?.toLowerCase() === userEmail.toLowerCase()) ?? null;
+  // FIX B7: paginate listUsers properly — perPage: 1000 breaks at 1001 users.
+  // Supabase admin API has no getUserByEmail; loop through pages until found.
+  // TODO: add email column to profiles table for O(1) lookup when user count grows.
+  let matchedUser: { id: string; email?: string } | null = null;
+  let userError: { message: string } | null = null;
+  {
+    let page = 1;
+    outer: while (true) {
+      const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage: 100 });
+      if (error) { userError = error; break; }
+      if (!data?.users?.length) break;
+      for (const u of data.users) {
+        if (u.email?.toLowerCase() === userEmail.toLowerCase()) {
+          matchedUser = u;
+          break outer;
+        }
+      }
+      if (data.users.length < 100) break; // last page
+      page++;
+    }
+  }
 
   if (userError || !matchedUser || !matchedUsers) {
     console.error(`Webhook: no user found for email ${userEmail}, payment ${paymentId}`);
@@ -164,10 +178,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // ── 8. AMOUNT VERIFICATION (mitigates email abuse) ──────────────────────
   // Verify amount paid matches the declared pack amount — attacker can't under-pay
   // to get more credits than they paid for.
-  const expectedPaise = pack.orders === 7 ? 99900 :
-                        pack.orders === 18 ? 199900 :
-                        pack.orders === 32 ? 349900 :
-                        pack.orders === 55 ? 599900 : -1;
+  // FIX B8: derive from pack.priceInr — hardcoded values diverge when pricing changes
+  const expectedPaise = pack.priceInr * 100;
   if (amountPaise !== expectedPaise) {
     console.warn(`Webhook amount mismatch: expected ${expectedPaise}, got ${amountPaise} for pack ${packId}`);
     return NextResponse.json({ error: 'Amount mismatch' }, { status: 400 });

@@ -132,8 +132,8 @@ export type PipelineAction =
   | { type: 'SET_CREDITS'; credits: number }
   | { type: 'INCREMENT_RETRY' }
   | { type: 'RESET_RETRY' }
-  | { type: 'SET_ORDER_ID'; orderId: string }
-  | { type: 'INCREMENT_SESSION_ORDER_COUNT' };
+  | { type: 'SET_ORDER_ID'; orderId: string };
+  // INCREMENT_SESSION_ORDER_COUNT removed — SET_GENERATED_TEXT already increments sessionOrderCount
 
 // â”€â”€ Validate API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 

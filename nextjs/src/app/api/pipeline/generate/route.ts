@@ -197,12 +197,14 @@ export async function POST(request: NextRequest): Promise<Response> {
             new Date(b.ref.uploaded_at).getTime() - new Date(a.ref.uploaded_at).getTime()
           );
 
-          // Log top 3 for observability in pm2 logs
+          // Log top 3 for observability
           const top3 = scored.slice(0, 3);
-          console.log(
-            `[ref-select] User ${userId} — scored ${userRefs.length} refs, keywords: ${keywords.length}, ` +
-            `top3: ${top3.map(s => `${s.ref.id.slice(-6)}:${s.score}`).join(', ')}`
-          );
+          await logError({
+            message: `[ref-select] scored ${userRefs.length} refs, keywords: ${keywords.length}, top3: ${top3.map(s => `${s.ref.id.slice(-6)}:${s.score}`).join(', ')}`,
+            route: '/api/pipeline/generate',
+            userId,
+            severity: 'INFO',
+          });
 
           references = scored.slice(0, 5).map(s => s.ref);
         } else {
@@ -216,7 +218,12 @@ export async function POST(request: NextRequest): Promise<Response> {
             .limit(5);
           references = (defaultRefs ?? []) as RefRow[];
           if (references.length === 0) {
-            console.log(`User ${userId} has no uploaded references — using default system prompt`);
+            await logError({
+              message: 'User has no uploaded references — using default system prompt only',
+              route: '/api/pipeline/generate',
+              userId,
+              severity: 'INFO',
+            });
           }
         }
 
@@ -225,7 +232,12 @@ export async function POST(request: NextRequest): Promise<Response> {
         // 1-4 refs = incomplete upload set — block and guide
         // 5+ refs = personalized generation — allowed
         if (references.length > 0 && references.length < 5) {
-          console.log('Blocked generation: partial references', references.length);
+          await logError({
+            message: `Blocked generation: partial references uploaded (${references.length}/5 minimum)`,
+            route: '/api/pipeline/generate',
+            userId,
+            severity: 'WARNING',
+          });
           send('error', {
             message: `${references.length} ಉಲ್ಲೇಖ ಆದೇಶಗಳು ಕಂಡಿವೆ. ಕನಿಷ್ಠ 5 ಅಪ್\u200Cಲೋಡ್ ಮಾಡಿ / Found ${references.length} reference orders. Upload minimum 5 to continue.`,
             code: 'INSUFFICIENT_REFERENCES',
@@ -306,9 +318,14 @@ export async function POST(request: NextRequest): Promise<Response> {
           // FIX C1: use redacted data for Sarvam (same as Anthropic path)
           // FIX A2: wrap in try/catch — fall back to Anthropic if Sarvam fails
           try {
-            const sarvamResult = await sarvamGenerate(
-              redactedCaseSummary, redactedAnswers, officerProfile, sarvamKey, personalPrompt
+            // FIX B3: timeout parity with Anthropic path — Sarvam can hang without this
+            const sarvamTimeoutPromise = new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('Sarvam generation timeout after 120 seconds')), GENERATION_TIMEOUT_MS)
             );
+            const sarvamResult = await Promise.race([
+              sarvamGenerate(redactedCaseSummary, redactedAnswers, officerProfile, sarvamKey, personalPrompt),
+              sarvamTimeoutPromise,
+            ]);
             const { result: sarvamReinjected, anomalies: sarvamAnomalies } = reInjectPII(sarvamResult.content, piiMap);
             generatedText = sarvamReinjected;
             if (sarvamAnomalies.length > 0) {
@@ -430,7 +447,8 @@ export async function POST(request: NextRequest): Promise<Response> {
         }
 
         // ── Self-audit ────────────────────────────────────────────────────────
-        let auditResult = await auditOrder(generatedText, caseSummary, caseType);
+        // FIX B1: use redactedCaseSummary — original caseSummary has PII that leaks into audit DB logs
+        let auditResult = await auditOrder(generatedText, redactedCaseSummary, caseType);
 
         if (auditResult.failures.length > 0 && anthropicKey && !isSimplePath) {
           const correctionInstruction = buildCorrectionInstruction(auditResult);
@@ -450,7 +468,7 @@ export async function POST(request: NextRequest): Promise<Response> {
               });
             }
             generatedText = reinjectedCorrection;
-            auditResult = await auditOrder(generatedText, caseSummary, caseType);
+            auditResult = await auditOrder(generatedText, redactedCaseSummary, caseType);
             send('correction', { text: generatedText });
           }
         }
@@ -551,6 +569,9 @@ function extractKeywords(cs: CaseSummary): string[] {
 // ── Credit refund ─────────────────────────────────────────────────────────────
 
 async function refundCredit(userId: string, adminClient: SupabaseClient): Promise<void> {
+  // FIX B2: RPC only — no direct UPDATE fallback.
+  // If RPC partially executes before throwing, a direct UPDATE fallback gives user +2 credits.
+  // Unresolved refund failures are logged as CRITICAL for manual ops resolution.
   try {
     const { error } = await adminClient.rpc('increment_credits', {
       user_uuid: userId,
@@ -558,17 +579,14 @@ async function refundCredit(userId: string, adminClient: SupabaseClient): Promis
     });
 
     if (error) {
-      const { data: p } = await adminClient
-        .from('profiles')
-        .select('credits_remaining')
-        .eq('id', userId)
-        .single();
-      if (p) {
-        await adminClient
-          .from('profiles')
-          .update({ credits_remaining: (p.credits_remaining ?? 0) + 1 })
-          .eq('id', userId);
-      }
+      await logError({
+        message: `CRITICAL: increment_credits RPC failed for user ${userId}. Manual credit restoration required.`,
+        route: '/api/pipeline/generate',
+        userId,
+        severity: 'ERROR',
+        metadata: { rpcError: error.message, refundFailed: true },
+      });
+      return;
     }
 
     await logError({
@@ -664,9 +682,10 @@ async function generateWithOpenRouter(
   const { messages } = buildPrompt(profile, references, caseSummary, answers, personalPrompt);
 
   // Convert to OpenAI message format
+  // FIX B4: filter to text-only blocks — non-text blocks (image, tool_use) have no .text property
   const openaiMessages = messages.map(m => ({
     role: m.role as 'user' | 'assistant',
-    content: m.content.map(c => c.text).join(''),
+    content: m.content.filter((c): c is { text: string } => 'text' in c).map(c => c.text).join(''),
   }));
 
   let fullText = '';
@@ -710,9 +729,10 @@ async function regenerateWithCorrection(
     const client = new Anthropic({ apiKey });
     const { messages } = buildPrompt(profile, references, caseSummary, answers, personalPrompt);
 
+    // FIX B5: avoid mutation — spread instead of in-place += on message content
     const lastMessage = messages[messages.length - 1];
     const lastContent = lastMessage.content[lastMessage.content.length - 1];
-    lastContent.text += correctionInstruction;
+    lastMessage.content[lastMessage.content.length - 1] = { ...lastContent, text: lastContent.text + correctionInstruction };
 
     const response = await client.messages.create({
       model: GENERATION_MODEL,

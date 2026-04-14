@@ -99,8 +99,8 @@ export function pipelineReducer(state: PipelineState, action: PipelineAction): P
     case 'SET_ORDER_ID':
       return { ...state, orderId: action.orderId };
 
-    case 'INCREMENT_SESSION_ORDER_COUNT':
-      return { ...state, sessionOrderCount: state.sessionOrderCount + 1 };
+    // FIX B11: INCREMENT_SESSION_ORDER_COUNT removed — SET_GENERATED_TEXT (above) already increments.
+    // Dispatching both would double-count session orders.
 
     default:
       return state;

@@ -37,8 +37,9 @@ export async function sarvamGenerate(
   personalPrompt?: string
 ): Promise<SarvamGenerateResult> {
   // FIX M5: personal_prompt is ADDITIVE — appended after base system prompt.
+  // FIX B12: prefer DB-resolved profile.officerName — answers.officerName is optional form field, may be empty
   const baseSystemPrompt = buildSystemPrompt({
-    officerName: answers.officerName,
+    officerName: profile.officerName ?? answers.officerName,
     districtAndCity: profile.districtAndCity ?? profile.district,
     officerSalutation: profile.salutation,
     officerQualifications: profile.designation,
