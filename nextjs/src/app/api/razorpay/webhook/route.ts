@@ -157,7 +157,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
   }
 
-  if (userError || !matchedUser || !matchedUsers) {
+  if (userError || !matchedUser) {
     console.error(`Webhook: no user found for email ${userEmail}, payment ${paymentId}`);
     // Record as pending — can be manually resolved
     await adminClient.from('transactions').insert({
