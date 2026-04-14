@@ -58,7 +58,7 @@ export async function checkDailyLimit(
       .lt('created_at', end.toISOString());
 
     if (error) {
-      // Per Requirement 15.6: if check fails, allow generation and log
+      // FIX C3: fail-closed — DB error means we cannot verify limit, block generation
       await logError({
         message: `Rate limit check failed for user ${userId}: ${error.message}`,
         route: '/api/pipeline/generate',
@@ -66,7 +66,7 @@ export async function checkDailyLimit(
         severity: 'WARNING',
         metadata: { error: error.message },
       });
-      return { allowed: true, ordersToday: 0, resetAt };
+      return { allowed: false, ordersToday: 0, resetAt };
     }
 
     const ordersToday = count ?? 0;
@@ -74,7 +74,7 @@ export async function checkDailyLimit(
 
     return { allowed, ordersToday, resetAt };
   } catch (err) {
-    // Per Requirement 15.6: if check throws, allow generation and log
+    // FIX C3: fail-closed on exception — cannot verify limit, block generation
     await logError({
       message: `Rate limit check threw for user ${userId}`,
       stack: err instanceof Error ? err.stack : undefined,
@@ -82,7 +82,7 @@ export async function checkDailyLimit(
       userId,
       severity: 'WARNING',
     });
-    return { allowed: true, ordersToday: 0, resetAt };
+    return { allowed: false, ordersToday: 0, resetAt };
   }
 }
 

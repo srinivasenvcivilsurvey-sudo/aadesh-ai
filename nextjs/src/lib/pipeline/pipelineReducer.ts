@@ -50,10 +50,11 @@ export function pipelineReducer(state: PipelineState, action: PipelineAction): P
       };
 
     case 'APPEND_STREAM':
+      // FIX C7: only update generatedText during streaming — editedText synced on SET_GENERATED_TEXT
+      // Updating editedText here clobbers any in-progress user edits during correction stream
       return {
         ...state,
         generatedText: state.generatedText + action.chunk,
-        editedText: state.editedText + action.chunk,
       };
 
     case 'SET_GENERATED_TEXT':

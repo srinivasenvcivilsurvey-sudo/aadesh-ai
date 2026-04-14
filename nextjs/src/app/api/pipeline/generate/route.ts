@@ -60,6 +60,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       }
 
       let creditDeducted = false;
+      let generationSuccessful = false; // FIX C5: track success to avoid spurious refund
       let resolvedUserId = '';
 
       try {
@@ -283,10 +284,22 @@ export async function POST(request: NextRequest): Promise<Response> {
             controller.close();
             return;
           }
+          // FIX C1: use redacted data for Sarvam (same as Anthropic path)
           const sarvamResult = await sarvamGenerate(
-            caseSummary, officerAnswers, officerProfile, sarvamKey
+            redactedCaseSummary, redactedAnswers, officerProfile, sarvamKey
           );
-          generatedText = sarvamResult.content;
+          const { result: sarvamReinjected, anomalies: sarvamAnomalies } = reInjectPII(sarvamResult.content, piiMap);
+          generatedText = sarvamReinjected;
+          if (sarvamAnomalies.length > 0) {
+            await logError({
+              message: `PII re-injection anomaly (Sarvam): ${sarvamAnomalies.join(', ')}`,
+              route: '/api/pipeline/generate',
+              userId,
+              severity: 'WARNING',
+              metadata: { anomalies: sarvamAnomalies },
+            });
+            generatedText += ['', '---', 'NOTE: Manual replacement needed:', sarvamAnomalies.join(', '), '---'].join('\n');
+          }
           modelUsed = SARVAM_MODEL_ID;
           send('chunk', { text: generatedText });
 
@@ -386,6 +399,7 @@ export async function POST(request: NextRequest): Promise<Response> {
         logCacheMetrics(userId, cachedTokens, sessionOrderCount);
 
         // ── Done ──────────────────────────────────────────────────────────────
+        generationSuccessful = true; // FIX C5: mark success before sending to client
         send('done', {
           guardrailScore: auditResult.score,
           cachedTokens,
@@ -396,10 +410,32 @@ export async function POST(request: NextRequest): Promise<Response> {
           outputTokens: outputTokens || null,
         });
 
+        // FIX M7: persist order to DB so it appears in my-orders and is never lost
+        await adminClient.from('orders').insert({
+          user_id: userId,
+          case_type: caseType,
+          generated_order: generatedText,
+          score: auditResult.score,
+          model_used: modelUsed,
+          version_number: 1,
+        }).then(({ error: orderError }) => {
+          if (orderError) {
+            // Non-fatal: log but don't fail — user already has the generated text
+            logError({
+              message: `Failed to persist order to DB: ${orderError.message}`,
+              route: '/api/pipeline/generate',
+              userId,
+              severity: 'WARNING',
+              metadata: { error: orderError.message },
+            });
+          }
+        });
+
         controller.close();
       } catch (err) {
-        // Credit auto-refund on any error after deduction
-        if (creditDeducted && resolvedUserId) {
+        // FIX C5: only refund if credit was deducted AND generation did NOT succeed
+        // (avoids spurious refund when stream close fires after client already received 'done')
+        if (creditDeducted && !generationSuccessful && resolvedUserId) {
           await refundCredit(resolvedUserId, createClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL!,
             process.env.SUPABASE_SERVICE_ROLE_KEY!
