@@ -685,7 +685,7 @@ async function generateWithOpenRouter(
   // FIX B4: filter to text-only blocks — non-text blocks (image, tool_use) have no .text property
   const openaiMessages = messages.map(m => ({
     role: m.role as 'user' | 'assistant',
-    content: m.content.filter((c): c is { text: string } => 'text' in c).map(c => c.text).join(''),
+    content: m.content.filter(c => c.type === 'text').map(c => c.text).join(''),
   }));
 
   let fullText = '';
