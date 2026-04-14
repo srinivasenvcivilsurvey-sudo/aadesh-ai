@@ -4,11 +4,11 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
     Home, User, Menu, X, ChevronDown, LogOut,
-    Key, Files, FileText, CreditCard, Upload, Brain, Globe,
+    Key, Files, FileText, CreditCard, Upload, Brain, Globe, Zap,
 } from 'lucide-react';
 import { useGlobal } from "@/lib/context/GlobalContext";
 import { useLanguage } from "@/lib/context/LanguageContext";
-import { createSPASassClient } from "@/lib/supabase/client";
+import { createSPASassClient, createSPAClient } from "@/lib/supabase/client";
 import strings, { t } from '@/lib/i18n';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -18,11 +18,30 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     const router = useRouter();
     const { user } = useGlobal();
     const { locale, toggleLocale } = useLanguage();
+    const [credits, setCredits] = useState<number | null>(null);
 
     // Reset scroll to top on every navigation
     useEffect(() => {
         window.scrollTo(0, 0);
     }, [pathname]);
+
+    // Fetch credit balance
+    useEffect(() => {
+        if (!user) return;
+        async function fetchCredits() {
+            try {
+                const supabase = createSPAClient();
+                const { data } = await supabase
+                    .from('profiles')
+                    .select('credits_remaining')
+                    .eq('id', user!.id)
+                    .single();
+                const row = data as { credits_remaining: number } | null;
+                setCredits(row?.credits_remaining ?? null);
+            } catch { /* silent */ }
+        }
+        fetchCredits();
+    }, [user, pathname]); // refresh on each page nav so post-export count updates
 
     const handleLogout = async () => {
         try {
@@ -169,6 +188,26 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                             <span className={locale === 'kn' ? 'font-bold text-primary-600' : 'text-gray-500'}>ಕನ್ನಡ</span>
                         </button>
                     </div>
+
+                    {/* Credits badge */}
+                    {credits !== null && (
+                        <Link
+                            href="/app/billing"
+                            className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-full border transition-colors ml-3 ${
+                                credits === 0
+                                    ? 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100'
+                                    : credits <= 2
+                                    ? 'bg-orange-50 border-orange-200 text-orange-600 hover:bg-orange-100'
+                                    : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                            }`}
+                        >
+                            <Zap className="h-3.5 w-3.5" />
+                            {credits === 0
+                                ? (locale === 'kn' ? 'ರೀಚಾರ್ಜ್' : 'Recharge')
+                                : `${credits} ${locale === 'kn' ? 'ಕ್ರೆಡಿಟ್' : 'credits'}`
+                            }
+                        </Link>
+                    )}
 
                     <div className="relative ml-auto">
                         <button

@@ -16,10 +16,10 @@ declare global {
 }
 
 const PACKS = [
-  { id: 'pack_a', name: 'ಪ್ಯಾಕ್ A', nameEn: 'Pack A', orders: 30, price: 499, perOrder: '₹16.6' },
-  { id: 'pack_b', name: 'ಪ್ಯಾಕ್ B', nameEn: 'Pack B', orders: 75, price: 999, perOrder: '₹13.3' },
-  { id: 'pack_c', name: 'ಪ್ಯಾಕ್ C', nameEn: 'Pack C', orders: 200, price: 1999, perOrder: '₹10.0' },
-  { id: 'pack_d', name: 'ಪ್ಯಾಕ್ D', nameEn: 'Pack D', orders: 600, price: 4999, perOrder: '₹8.3', bestValue: true },
+  { id: 'pack_a', name: 'ಪ್ಯಾಕ್ A', nameEn: 'Pack A', orders: 7, price: 999, perOrder: '₹142' },
+  { id: 'pack_b', name: 'ಪ್ಯಾಕ್ B', nameEn: 'Pack B', orders: 18, price: 1999, perOrder: '₹111' },
+  { id: 'pack_c', name: 'ಪ್ಯಾಕ್ C', nameEn: 'Pack C', orders: 32, price: 3499, perOrder: '₹109' },
+  { id: 'pack_d', name: 'ಪ್ಯಾಕ್ D', nameEn: 'Pack D', orders: 55, price: 5999, perOrder: '₹109', bestValue: true },
 ];
 
 export default function BillingPage() {

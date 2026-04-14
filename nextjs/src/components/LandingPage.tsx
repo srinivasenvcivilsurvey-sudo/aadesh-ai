@@ -340,7 +340,7 @@ export default function LandingPage() {
   const [activeTab, setActiveTab] = useState<"gov" | "pro">("gov");
   const [drafterCost, setDrafterCost] = useState(1500);
   const [ordersPerMonth, setOrdersPerMonth] = useState(30);
-  const aadeshCostPerOrder = 42;
+  const aadeshCostPerOrder = 50;
   const monthlySavings = Math.max(0, (drafterCost - aadeshCostPerOrder) * ordersPerMonth);
 
   useEffect(() => { setMounted(true); }, []);
@@ -803,9 +803,10 @@ export default function LandingPage() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 20, maxWidth: 900, margin: "0 auto" }}>
             {[
               { name: { en: "Try Free", kn: "ಉಚಿತ" }, orders: 3, price: 0, perOrder: 0, featured: false },
-              { name: { en: "Pack A", kn: "ಪ್ಯಾಕ್ A" }, orders: 5, price: 499, perOrder: 100, featured: false },
-              { name: { en: "Pack B", kn: "ಪ್ಯಾಕ್ B" }, orders: 15, price: 999, perOrder: 67, featured: true },
-              { name: { en: "Pack C", kn: "ಪ್ಯಾಕ್ C" }, orders: 40, price: 1999, perOrder: 50, featured: false },
+              { name: { en: "Pack A", kn: "ಪ್ಯಾಕ್ A" }, orders: 7, price: 999, perOrder: 142, featured: false },
+              { name: { en: "Pack B", kn: "ಪ್ಯಾಕ್ B" }, orders: 18, price: 1999, perOrder: 111, featured: true },
+              { name: { en: "Pack C", kn: "ಪ್ಯಾಕ್ C" }, orders: 32, price: 3499, perOrder: 109, featured: false },
+              { name: { en: "Pack D", kn: "ಪ್ಯಾಕ್ D" }, orders: 55, price: 5999, perOrder: 109, featured: false },
             ].map((pack, i) => (
               <Reveal key={i} delay={i * 100}>
                 <div style={{
@@ -867,7 +868,7 @@ export default function LandingPage() {
           </div>
           <Reveal delay={400}>
             <p style={{ textAlign: "center", marginTop: 24, fontSize: 13, color: C.midGray, fontFamily: "'Noto Sans Kannada', sans-serif" }}>
-              ಚಂದಾ ಇಲ್ಲ. ಬಳಸಿದಷ್ಟು ಪಾವತಿಸಿ. &nbsp;/&nbsp; No subscription. Pay only when you use.
+              UPI ಮೂಲಕ ಪಾವತಿ · ಕ್ರೆಡಿಟ್‌ಗಳು ಮುಕ್ತಾಯವಾಗದು &nbsp;/&nbsp; Pay via UPI · No lock-in · Credits never expire
             </p>
           </Reveal>
         </div>

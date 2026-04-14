@@ -105,25 +105,39 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExportDoc
 
     // ── Save order record ─────────────────────────────────────────────────────
     const wordCount = finalText.split(/\s+/).filter(Boolean).length;
+    const costRupees = estimateCostRupees(
+      modelUsed || 'sarvam',
+      inputTokens ?? 0,
+      outputTokens ?? 0
+    );
 
-    await adminClient.from('orders').insert({
+    const { error: insertError } = await adminClient.from('orders').insert({
       id: orderId,
       user_id: userId,
       case_type: caseType,
       case_number: caseNumber || null,
       generated_order: finalText,
       score: guardrailScore ?? 0,
-      model_used: modelUsed || 'claude-sonnet-4-6',
+      model_used: modelUsed || 'sarvam-105b',
       verified: true,
-      // Additional pipeline fields (may not exist in current schema — safe to include)
       word_count: wordCount,
       credits_used: 1,
-      // v9.2 additions
-      prompt_version: promptVersion || 'V3.2.1',
+      prompt_version: promptVersion || 'V3.2.6',
       input_tokens: inputTokens ?? null,
       output_tokens: outputTokens ?? null,
       acknowledgement_at: acknowledgementAt ?? null,
+      generation_cost_rupees: costRupees,
     });
+    if (insertError) {
+      console.error('[export-docx] orders insert error:', insertError.message);
+    }
+
+    // ── Deduct 1 credit from profile (GREATEST prevents < 0) ─────────────────
+    const { error: deductError } = await adminClient.rpc('deduct_credit', { user_id: userId });
+    if (deductError) {
+      // Log but never block the export — user already generated the file
+      console.error('[export-docx] credit deduction failed:', deductError.message);
+    }
 
     // ── Return download URL or direct buffer ──────────────────────────────────
     // Try to get a signed URL from storage; fall back to base64 in response
@@ -237,4 +251,19 @@ async function generateDocxBuffer(orderText: string, footerText: string): Promis
 
   const buffer = await Packer.toBuffer(doc);
   return Buffer.from(buffer);
+}
+
+// ── Cost estimation ───────────────────────────────────────────────────────────
+
+function estimateCostRupees(model: string, inputTokens: number, outputTokens: number): number {
+  if (model.includes('sarvam')) return 0;
+  // Sonnet 4.6: $3/M input, $15/M output
+  const INPUT_COST_PER_M = 3.0;
+  const OUTPUT_COST_PER_M = 15.0;
+  const USD_TO_INR = 93.34;
+  const cost =
+    ((inputTokens / 1_000_000) * INPUT_COST_PER_M +
+      (outputTokens / 1_000_000) * OUTPUT_COST_PER_M) *
+    USD_TO_INR;
+  return Math.round(cost * 100) / 100;
 }

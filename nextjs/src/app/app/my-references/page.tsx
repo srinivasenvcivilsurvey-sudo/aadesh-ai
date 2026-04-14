@@ -369,8 +369,7 @@ export default function MyReferencesPage() {
         <CardContent className="pt-6">
           <div className="text-center space-y-2 mb-6">
             <p className="text-sm text-gray-700 font-medium" style={{ fontFamily: "'Noto Sans Kannada', system-ui, sans-serif" }}>
-              ನಿಮ್ಮ ಸ್ವಂತ ಅಂತಿಮ ಆದೇಶಗಳನ್ನು ಅಪ್\u200Cಲೋಡ್ ಮಾಡಿ.
-              AI ನಿಮ್ಮ ಶೈಲಿ ಕಲಿತು ನಿಮ್ಮಂತೆಯೇ ಬರೆಯುತ್ತದೆ.
+              {'ನಿಮ್ಮ ಸ್ವಂತ ಅಂತಿಮ ಆದೇಶಗಳನ್ನು ಅಪ್\u200Cಲೋಡ್ ಮಾಡಿ. AI ನಿಮ್ಮ ಶೈಲಿ ಕಲಿತು ನಿಮ್ಮಂತೆಯೇ ಬರೆಯುತ್ತದೆ.'}
             </p>
             <p className="text-sm text-gray-500">
               Upload your own finalized orders. AI learns your style and drafts exactly like you.
