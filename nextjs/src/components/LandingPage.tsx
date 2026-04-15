@@ -396,7 +396,7 @@ export default function LandingPage() {
             <Globe size={14} />
             {l ? "EN" : "ಕನ್ನಡ"}
           </button>
-          <Link href="/auth/login" style={{
+          <Link href="/auth/register" style={{
             background: `linear-gradient(135deg, ${C.saffron}, ${C.saffronDark})`, color: "white", padding: "8px 20px",
             borderRadius: 8, fontSize: 14, fontWeight: 600, textDecoration: "none",
             boxShadow: "0 4px 14px rgba(233,123,59,0.3)",

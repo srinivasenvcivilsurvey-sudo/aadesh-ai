@@ -44,23 +44,23 @@ const CookieConsent = () => {
     if (!isVisible) return null;
 
     return (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg z-50 transform transition-transform duration-500 ease-in-out">
+        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "rgba(255,247,240,0.97)", borderTop: "1px solid rgba(233,123,59,0.2)", boxShadow: "0 -4px 20px rgba(0,0,0,0.08)", zIndex: 50 }}>
             <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                     <div className="flex items-center gap-3 flex-shrink-0">
-                        <Shield className="h-5 w-5 text-blue-600" />
+                        <Shield style={{ width: 20, height: 20, color: "#E97B3B", flexShrink: 0 }} />
                         <div className="space-y-1">
-                            <p className="text-sm text-gray-600">
-                                We use cookies to enhance your browsing experience, serve personalized content, and analyze our traffic.
+                            <p className="text-sm" style={{ color: "#4B5563" }}>
+                                We use cookies to enhance your browsing experience and analyze our traffic.
                                 By clicking &quot;Accept&quot;, you consent to our use of cookies.
                             </p>
-                            <p className="text-sm text-gray-500">
+                            <p className="text-sm" style={{ color: "#9CA3AF" }}>
                                 Read our{' '}
-                                <Link href={`/legal/privacy`} className="text-blue-600 hover:text-blue-700 underline">
+                                <Link href={`/legal/privacy`} style={{ color: "#E97B3B", textDecoration: "underline" }}>
                                     Privacy Policy
                                 </Link>{' '}
                                 and{' '}
-                                <Link href={`/legal/terms`} className="text-blue-600 hover:text-blue-700 underline">
+                                <Link href={`/legal/terms`} style={{ color: "#E97B3B", textDecoration: "underline" }}>
                                     Terms of Service
                                 </Link>{' '}
                                 for more information.
@@ -72,23 +72,23 @@ const CookieConsent = () => {
                             variant="outline"
                             size="sm"
                             onClick={handleDecline}
-                            className="text-gray-600 hover:text-gray-700"
+                            style={{ borderColor: "#E97B3B", color: "#E97B3B" }}
                         >
                             Decline
                         </Button>
                         <Button
                             size="sm"
                             onClick={handleAccept}
-                            className="bg-blue-600 text-white hover:bg-blue-700"
+                            style={{ background: "linear-gradient(135deg, #F9A825, #E97B3B)", color: "white", border: "none" }}
                         >
                             Accept
                         </Button>
                         <button
                             onClick={handleDecline}
-                            className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+                            className="p-1 hover:bg-orange-50 rounded-full transition-colors"
                             aria-label="Close"
                         >
-                            <X className="h-4 w-4 text-gray-500" />
+                            <X style={{ width: 16, height: 16, color: "#9CA3AF" }} />
                         </button>
                     </div>
                 </div>
