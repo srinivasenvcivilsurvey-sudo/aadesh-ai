@@ -434,9 +434,23 @@ export default function LandingPage() {
             fontFamily: "'Noto Serif Kannada', 'Noto Serif', serif", letterSpacing: -1,
           }}>
             {locale === "kn" ? (
-              <>ಯಾವುದೇ <TypewriterWord key="kn" locale="kn" /><br />2 ನಿಮಿಷದಲ್ಲಿ ಬರೆಯಿರಿ.</>
+              <>
+                <span style={{ display: "block" }}>ಯಾವುದೇ</span>
+                {/* FIX: whiteSpace nowrap prevents word-length changes from reflowing layout */}
+                <span style={{ display: "block", whiteSpace: "nowrap" }}>
+                  <TypewriterWord key="kn" locale="kn" />
+                </span>
+                <span style={{ display: "block" }}>2 ನಿಮಿಷದಲ್ಲಿ ಬರೆಯಿರಿ.</span>
+              </>
             ) : (
-              <>Draft Any <TypewriterWord key="en" locale="en" /><br />in 2 Minutes.</>
+              <>
+                <span style={{ display: "block" }}>Draft Any</span>
+                {/* FIX: whiteSpace nowrap prevents word-length changes from reflowing layout */}
+                <span style={{ display: "block", whiteSpace: "nowrap" }}>
+                  <TypewriterWord key="en" locale="en" />
+                </span>
+                <span style={{ display: "block" }}>in 2 Minutes.</span>
+              </>
             )}
           </h1>
           <p style={{ fontSize: 22, color: C.midGray, fontStyle: "italic", fontFamily: "'Noto Sans Kannada', sans-serif", marginTop: 12 }}>
