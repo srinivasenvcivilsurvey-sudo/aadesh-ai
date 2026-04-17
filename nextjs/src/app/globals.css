@@ -7,6 +7,15 @@
     --color-background: #ffffff;
     --color-foreground: #0f172a;
 
+    /* ── Gov brand tokens (Arcada P0 sprint, 2026-04-17) ────────────────────── */
+    --color-gov-blue: #1a3a6b;
+    --color-gov-green: #1a6b3c;
+    --color-gov-gold: #c9a84c;
+    --color-gov-header-gradient: linear-gradient(135deg, #1a3a6b 0%, #1a6b3c 100%);
+    --color-trust-green-bg: rgb(232, 244, 237);
+    --color-trust-amber-bg: rgb(253, 246, 227);
+    --color-trust-blue-bg: rgb(232, 237, 246);
+
     /* Primary colors */
     --color-primary-50: #f0f9ff;
     --color-primary-100: #e0f2fe;

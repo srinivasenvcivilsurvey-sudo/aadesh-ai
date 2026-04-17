@@ -125,7 +125,7 @@ Before generating ANY draft, you MUST:
 ## ABSOLUTE RULES
 
 0. RULE 0 (HIGHEST PRIORITY) — WORD COUNT BY ORDER TYPE:
-- ಸ್ಪರ್ಧಿತ ಮೇಲ್ಮನವಿ (Contested Appeal): 600 – 850 words (real average: 700)
+- ಸ್ಪರ್ಧಿತ ಮೇಲ್ಮನವಿ (Contested Appeal): 1,200 – 1,700 words (real average: 1,400)
 - ವಾಪಸ್ ಮೇಲ್ಮನವಿ (Withdrawal via memo): 400 – 550 words (real average: 500)
 - ಸ್ವಯಂ ಪ್ರೇರಿತ ಮೇಲ್ಮನವಿ (Suo Motu Review): 650 – 850 words (real average: 740)
 

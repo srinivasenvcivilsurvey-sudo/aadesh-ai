@@ -60,6 +60,12 @@ const config: Config = {
   				DEFAULT: 'hsl(var(--destructive))',
   				foreground: 'hsl(var(--destructive-foreground))'
   			},
+  			/* Gov brand tokens (Arcada P0 sprint, 2026-04-17) */
+  			gov: {
+  				blue:  'var(--color-gov-blue, #1a3a6b)',
+  				green: 'var(--color-gov-green, #1a6b3c)',
+  				gold:  'var(--color-gov-gold, #c9a84c)',
+  			},
   			border: 'hsl(var(--border))',
   			input: 'hsl(var(--input))',
   			ring: 'hsl(var(--ring))',

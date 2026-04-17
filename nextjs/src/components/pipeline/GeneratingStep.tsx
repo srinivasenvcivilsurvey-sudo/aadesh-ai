@@ -6,6 +6,7 @@ import { Loader2, AlertCircle, RefreshCw, CreditCard } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { getAuthToken } from '@/lib/pipeline/getAuthToken';
+import { TimePromiseBar } from '@/components/pipeline/TimePromiseBar';
 import type { PipelineAction, PipelineState } from '@/lib/pipeline/types';
 
 const MAX_RETRIES = 3;
@@ -266,6 +267,8 @@ export function GeneratingStep({ dispatch, locale, state, userId, onComplete }: 
   return (
     <Card>
       <CardContent className="py-8 space-y-5">
+        {/* Time promise (Arcada P0 sprint, 2026-04-17) */}
+        <TimePromiseBar />
         {/* Main spinner + status */}
         <div className="text-center space-y-3">
           <div className="relative inline-flex">

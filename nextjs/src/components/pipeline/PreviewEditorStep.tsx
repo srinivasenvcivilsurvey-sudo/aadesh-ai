@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { CheckCircle, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { TrustCards } from '@/components/pipeline/TrustCards';
 import type { PipelineAction, PipelineState } from '@/lib/pipeline/types';
 
 interface PreviewEditorStepProps {
@@ -81,6 +82,8 @@ export function PreviewEditorStep({ dispatch, locale, state }: PreviewEditorStep
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Trust cards (Arcada P0 sprint, 2026-04-17) */}
+        <TrustCards />
         {/* AI disclaimer watermark */}
         <div className="text-center py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs font-medium text-amber-700">
           ಆದೇಶ AI ಸಹಾಯದಿಂದ ಕರಡು | Drafted by Aadesh AI — Please verify before signing.

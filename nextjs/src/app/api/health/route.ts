@@ -19,6 +19,11 @@ import { createClient } from '@supabase/supabase-js';
 const APP_VERSION = '0.1.0';
 const DB_CHECK_TIMEOUT_MS = 1500; // 1.5s — leaves 0.5s buffer for response
 
+// FIX 2026-04-17 (BUG-L3): Expose build SHA so Lakshmi can verify VPS deploy freshness.
+// VPS PM2 ecosystem should set BUILD_SHA=$(git rev-parse --short HEAD) before `pm2 reload`.
+// Falls back to 'unknown' if env var missing (local dev, un-set deploys).
+const BUILD_SHA = process.env.BUILD_SHA ?? 'unknown';
+
 export async function GET(): Promise<NextResponse> {
   const timestamp = new Date().toISOString();
 
@@ -27,13 +32,13 @@ export async function GET(): Promise<NextResponse> {
 
   if (!dbOk) {
     return NextResponse.json(
-      { status: 'degraded', reason: 'database_unavailable' },
+      { status: 'degraded', reason: 'database_unavailable', buildSha: BUILD_SHA },
       { status: 503 }
     );
   }
 
   return NextResponse.json(
-    { status: 'ok', timestamp, version: APP_VERSION },
+    { status: 'ok', timestamp, version: APP_VERSION, buildSha: BUILD_SHA },
     { status: 200 }
   );
 }

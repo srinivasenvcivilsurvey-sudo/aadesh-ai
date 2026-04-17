@@ -168,24 +168,39 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
 
             <div className="lg:pl-64">
-                <div className="sticky top-0 z-10 flex items-center justify-between h-[72px] bg-gradient-to-r from-[#1A237E]/[0.04] via-white to-white border-b border-[#F3E5D8] shadow-sm px-6">
+                {/* Gov gradient header (Arcada P0 sprint, 2026-04-17) */}
+                <div
+                    className="sticky top-0 z-10 flex items-center justify-between h-[72px] border-b-[3px] shadow-md px-6"
+                    style={{
+                        background: 'var(--color-gov-header-gradient, linear-gradient(135deg, #1a3a6b 0%, #1a6b3c 100%))',
+                        borderColor: 'var(--color-gov-gold, #c9a84c)',
+                    }}
+                >
                     <button
                         onClick={toggleSidebar}
-                        className="lg:hidden text-gray-500 hover:text-gray-700"
+                        className="lg:hidden text-white/80 hover:text-white"
                     >
                         <Menu className="h-6 w-6" />
                     </button>
+
+                    {/* Shield + OFFICIAL USE ONLY badge (desktop) */}
+                    <div className="hidden lg:flex items-center gap-2 mr-4">
+                        <span className="text-white text-lg" aria-hidden>🛡️</span>
+                        <span className="text-[10px] font-bold tracking-widest text-amber-300 uppercase whitespace-nowrap">
+                            Official Use Only
+                        </span>
+                    </div>
 
                     {/* Language toggle in header (visible on desktop) */}
                     <div className="hidden lg:flex items-center">
                         <button
                             onClick={toggleLocale}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full border border-gray-200 hover:bg-gray-50 transition-colors"
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full border border-white/30 hover:bg-white/10 transition-colors"
                         >
-                            <Globe className="h-3.5 w-3.5 text-gray-500" />
-                            <span className={locale === 'en' ? 'font-bold text-primary-600' : 'text-gray-500'}>EN</span>
-                            <span className="text-gray-300">|</span>
-                            <span className={locale === 'kn' ? 'font-bold text-primary-600' : 'text-gray-500'}>ಕನ್ನಡ</span>
+                            <Globe className="h-3.5 w-3.5 text-white/70" />
+                            <span className={locale === 'en' ? 'font-bold text-white' : 'text-white/60'}>EN</span>
+                            <span className="text-white/30">|</span>
+                            <span className={locale === 'kn' ? 'font-bold text-white' : 'text-white/60'}>ಕನ್ನಡ</span>
                         </button>
                     </div>
 
@@ -195,10 +210,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                             href="/app/billing"
                             className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-full border transition-colors ml-3 ${
                                 credits === 0
-                                    ? 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100'
+                                    ? 'bg-red-500/20 border-red-300 text-red-200 hover:bg-red-500/30'
                                     : credits <= 2
-                                    ? 'bg-orange-50 border-orange-200 text-orange-600 hover:bg-orange-100'
-                                    : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                                    ? 'bg-orange-400/20 border-orange-300 text-orange-200 hover:bg-orange-400/30'
+                                    : 'bg-white/10 border-white/30 text-white hover:bg-white/20'
                             }`}
                         >
                             <Zap className="h-3.5 w-3.5" />
@@ -212,10 +227,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     <div className="relative ml-auto">
                         <button
                             onClick={() => setUserDropdownOpen(!isUserDropdownOpen)}
-                            className="flex items-center space-x-2 text-sm text-gray-700 hover:text-gray-900"
+                            className="flex items-center space-x-2 text-sm text-white hover:text-white/80"
                         >
-                            <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center">
-                                <span className="text-primary-700 font-medium">
+                            <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+                                <span className="text-white font-medium">
                                     {user ? getInitials(user.email) : '??'}
                                 </span>
                             </div>

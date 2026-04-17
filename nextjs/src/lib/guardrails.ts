@@ -222,7 +222,7 @@ function detectCaseCategory(inputText: string, orderText: string = ''): CaseCate
 const WORD_COUNT_TARGETS: Record<CaseCategory, { min: number; max: number; label: string }> = {
   withdrawal: { min: 400, max: 550,  label: 'withdrawal/memo' },
   suo_motu:   { min: 650, max: 850,  label: 'suo motu review' },
-  contested:  { min: 600, max: 850, label: 'contested appeal' },
+  contested:  { min: 1200, max: 1700, label: 'contested appeal' },
 };
 
 export function checkWordCount(
@@ -257,11 +257,15 @@ export function checkWordCount(
 
 export function runGuardrails(
   orderText: string,
-  orderType: 'appeal' | 'suo_motu',
+  orderType: 'appeal' | 'suo_motu' | 'contested' | 'withdrawal',
   inputText: string
 ): GuardrailReport {
+  // FIX 2026-04-16 (BUG-L1): Map all 4 order types to section-check categories.
+  // Contested + withdrawal are both appeal types; only suo_motu uses different markers.
+  const sectionType: 'appeal' | 'suo_motu' = orderType === 'suo_motu' ? 'suo_motu' : 'appeal';
+
   const results: GuardrailResult[] = [
-    checkSectionCompleteness(orderText, orderType),
+    checkSectionCompleteness(orderText, sectionType),
     checkAntiTransliteration(orderText),
     checkFactPreservation(inputText, orderText),
     checkWordCount(orderText, inputText),
