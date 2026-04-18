@@ -62,6 +62,9 @@ jobs:
             echo "→ Install dependencies"
             npm install --legacy-peer-deps --prefer-offline
 
+            echo "→ Clean stale build cache"
+            rm -rf .next
+
             echo "→ Build"
             npm run build
 
