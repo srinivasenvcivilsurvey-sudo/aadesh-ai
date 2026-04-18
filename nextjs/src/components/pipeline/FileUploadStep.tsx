@@ -275,56 +275,66 @@ export function FileUploadStep({ dispatch, locale }: FileUploadStepProps) {
               onDragEnter={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${
+              className={`border-2 border-dashed rounded-2xl p-10 text-center transition-all ${
                 uploadSuccess
                   ? 'border-green-400 bg-green-50 cursor-default'
                   : loading
                     ? 'border-primary-300 bg-primary-50 cursor-wait'
                     : isDragging
-                      ? 'border-primary-500 bg-primary-50 scale-[1.01]'
-                      : 'border-gray-300 hover:border-primary-400 cursor-pointer'
+                      ? 'border-primary-500 bg-primary-50 scale-[1.01] shadow-lg'
+                      : 'border-gray-300 hover:border-primary-400 hover:bg-orange-50/30 cursor-pointer'
               }`}
             >
               {uploadSuccess ? (
-                <div className="flex flex-col items-center gap-2">
-                  <CheckCircle2 className="h-10 w-10 text-green-500" />
+                <div className="flex flex-col items-center gap-3">
+                  <CheckCircle2 className="h-16 w-16 text-green-500" />
                   <p className="text-sm font-semibold text-green-700">
                     {kn ? 'ಫೈಲ್ ಸಿದ್ಧ! AI ಓದಲು ಆರಂಭಿಸುತ್ತಿದೆ...' : 'File ready! Starting AI reading...'}
                   </p>
                   <p className="text-xs text-green-600">{selectedFile?.name}</p>
                 </div>
               ) : loading ? (
-                <div className="flex flex-col items-center gap-2">
-                  <Loader2 className="h-10 w-10 text-primary-500 animate-spin" />
+                <div className="flex flex-col items-center gap-3">
+                  <Loader2 className="h-16 w-16 text-primary-500 animate-spin" />
                   <p className="text-sm text-primary-600 font-medium">
                     {kn ? 'ಫೈಲ್ ಓದಲಾಗುತ್ತಿದೆ...' : 'Reading file...'}
                   </p>
                   {selectedFile && <p className="text-xs text-gray-400">{selectedFile.name}</p>}
                 </div>
               ) : isDragging ? (
-                <div className="flex flex-col items-center gap-2">
-                  <Upload className="h-10 w-10 text-primary-500" />
-                  <p className="text-sm font-semibold text-primary-600">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-20 h-20 rounded-2xl bg-primary-100 flex items-center justify-center">
+                    <Upload className="h-10 w-10 text-primary-500" />
+                  </div>
+                  <p className="text-base font-bold text-primary-600">
                     {kn ? 'ಇಲ್ಲಿ ಬಿಡಿ' : 'Drop file here'}
                   </p>
                 </div>
               ) : selectedFile ? (
-                <div className="flex flex-col items-center gap-2">
-                  <Upload className="h-10 w-10 text-gray-400" />
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-20 h-20 rounded-2xl bg-gray-100 flex items-center justify-center">
+                    <Upload className="h-10 w-10 text-gray-400" />
+                  </div>
                   <p className="text-sm font-medium text-gray-700">{selectedFile.name}</p>
                   <p className="text-xs text-gray-400">
                     {kn ? 'ಬೇರೆ ಫೈಲ್ ಆಯ್ಕೆ ಮಾಡಲು ಕ್ಲಿಕ್ ಮಾಡಿ' : 'Click to select a different file'}
                   </p>
                 </div>
               ) : (
-                <div className="flex flex-col items-center gap-2">
-                  <Upload className="h-10 w-10 text-gray-400" />
-                  <p className="text-sm font-semibold text-gray-700">
-                    {kn ? 'ಫೈಲ್ ಎಳೆದು ಬಿಡಿ ಅಥವಾ ಕ್ಲಿಕ್ ಮಾಡಿ' : 'Drag & drop or click to upload'}
-                  </p>
-                  <p className="text-xs text-gray-400">
-                    {kn ? 'PDF, DOCX, JPG, PNG — ಗರಿಷ್ಠ 200 ಪುಟಗಳು' : 'PDF, DOCX, JPG, PNG — max 200 pages'}
-                  </p>
+                <div className="flex flex-col items-center gap-3">
+                  {/* 80×80 icon tile */}
+                  <div className="w-20 h-20 rounded-2xl bg-orange-50 border-2 border-orange-200 flex items-center justify-center">
+                    <Upload className="h-10 w-10 text-[#e85d26]" />
+                  </div>
+                  <div>
+                    <p className="text-base font-bold text-gray-800">
+                      {kn ? 'ಫೈಲ್ ಎಳೆದು ಬಿಡಿ ಅಥವಾ ಕ್ಲಿಕ್ ಮಾಡಿ' : 'Drag & drop or click to upload'}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1" style={{ fontFamily: "'Noto Sans Kannada', sans-serif" }}>
+                      {kn ? 'Drag & drop or click to upload' : 'ಫೈಲ್ ಎಳೆದು ಬಿಡಿ ಅಥವಾ ಕ್ಲಿಕ್ ಮಾಡಿ'}
+                    </p>
+                  </div>
+                  <p className="text-xs text-gray-400">PDF · DOCX · JPG · PNG</p>
                 </div>
               )}
               <input
@@ -336,9 +346,14 @@ export function FileUploadStep({ dispatch, locale }: FileUploadStepProps) {
               />
             </div>
             {!uploadSuccess && (
-              <p className="text-xs text-gray-400 text-center">
-                {kn ? 'ಫೈಲ್ ಅಪ್\u200Cಲೋಡ್ ಮಾಡಿದ ನಂತರ AI ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಓದುತ್ತದೆ' : 'After upload, AI reads the file automatically'}
-              </p>
+              <div className="text-center space-y-0.5">
+                <p className="text-xs font-medium text-gray-500">
+                  {kn ? 'PDF ಅಪ್‌ಲೋಡ್ ನಂತರ AI ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಓದುತ್ತದೆ (10–15 ಸೆಕೆಂಡ್)' : 'PDF will be read automatically after upload (10–15 seconds)'}
+                </p>
+                <p className="text-xs text-gray-400" style={{ fontFamily: "'Noto Sans Kannada', sans-serif" }}>
+                  {kn ? 'PDF will be read automatically after upload (10–15 seconds)' : 'PDF ಅಪ್‌ಲೋಡ್ ನಂತರ AI ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಓದುತ್ತದೆ (10–15 ಸೆಕೆಂಡ್)'}
+                </p>
+              </div>
             )}
           </>
         )}

@@ -340,10 +340,18 @@ export default function LandingPage() {
   const [activeTab, setActiveTab] = useState<"gov" | "pro">("gov");
   const [drafterCost, setDrafterCost] = useState(1500);
   const [ordersPerMonth, setOrdersPerMonth] = useState(30);
+  const [showStickyCTA, setShowStickyCTA] = useState(false);
   const aadeshCostPerOrder = 50;
   const monthlySavings = Math.max(0, (drafterCost - aadeshCostPerOrder) * ordersPerMonth);
 
   useEffect(() => { setMounted(true); }, []);
+
+  // Sticky CTA — show after scrolling past hero (~700px)
+  useEffect(() => {
+    function onScroll() { setShowStickyCTA(window.scrollY > 700); }
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   useEffect(() => {
     async function fetchCount() {
@@ -1012,6 +1020,39 @@ export default function LandingPage() {
           </Reveal>
         </div>
       </section>
+
+      {/* ── STICKY BOTTOM CTA ─────────────────────────────────────────────── */}
+      <div style={{
+        position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 100,
+        transform: showStickyCTA ? "translateY(0)" : "translateY(100%)",
+        transition: "transform 400ms cubic-bezier(0.16, 1, 0.3, 1)",
+        background: "rgba(255, 247, 240, 0.95)",
+        backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
+        borderTop: `1px solid ${C.borderWarm}`,
+        boxShadow: "0 -4px 24px rgba(0,0,0,0.08)",
+        padding: "12px 20px",
+        paddingBottom: "max(12px, env(safe-area-inset-bottom))",
+      }}>
+        <div style={{ maxWidth: 640, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <div style={{ lineHeight: 1.3 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.charcoal }}>
+              <Bi en="3 free orders — no card needed" kn="3 ಉಚಿತ ಆದೇಶ — ಕ್ರೆಡಿಟ್ ಕಾರ್ಡ್ ಇಲ್ಲ" locale={locale} />
+            </div>
+            <div style={{ fontSize: 11, color: C.midGray, fontFamily: "'Noto Sans Kannada', sans-serif" }}>
+              <Bi en="ಕ್ರೆಡಿಟ್ ಕಾರ್ಡ್ ಅಗತ್ಯವಿಲ್ಲ · ತಕ್ಷಣ ಪ್ರಾರಂಭ" kn="No card · Start instantly" locale={locale} />
+            </div>
+          </div>
+          <Link href="/auth/register" style={{
+            display: "inline-flex", alignItems: "center", gap: 8, flexShrink: 0,
+            background: `linear-gradient(135deg, ${C.saffron}, ${C.saffronDark})`,
+            color: "white", padding: "11px 24px", borderRadius: 10,
+            fontSize: 14, fontWeight: 700, textDecoration: "none",
+            boxShadow: "0 4px 14px rgba(233,123,59,0.35)",
+          }}>
+            <Bi en="Try Free →" kn="ಉಚಿತ ಪ್ರಯತ್ನಿಸಿ →" locale={locale} />
+          </Link>
+        </div>
+      </div>
 
       {/* ── SECTION 9: NAVY GRADIENT FOOTER (like live site) ───────────────── */}
       <footer style={{
