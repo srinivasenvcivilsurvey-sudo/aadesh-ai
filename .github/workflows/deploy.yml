@@ -66,10 +66,14 @@ jobs:
             echo "Build"
             npm run build
 
-            echo "Copy standalone runtime"
+            echo "Copy standalone runtime (REQUIRED - missing before Apr 18 outage)"
             cp -r .next/standalone/. /root/aadesh-ai/
-            cp -r .next/static /root/aadesh-ai/.next/static
-            cp -r public /root/aadesh-ai/public
+
+            echo "Sync static assets with --delete (prevents stale chunk hash merging)"
+            rsync -a --delete .next/static/ /root/aadesh-ai/.next/static/
+
+            echo "Copy public assets"
+            cp -r public/. /root/aadesh-ai/public/
 
             echo "Restart PM2"
             source .env.local && pm2 restart aadesh-ai --update-env
