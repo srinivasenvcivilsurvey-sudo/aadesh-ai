@@ -35,6 +35,10 @@ const C = {
   redText: "#991B1B",
   gold: "#F9A825",
   brownDisplay: "#3F1A08",
+  // Arcada P1 pastel section backgrounds
+  pastelGreen: "rgb(232,244,237)",
+  pastelAmber: "rgb(253,246,227)",
+  pastelBlue:  "rgb(232,237,246)",
 };
 
 // ── Mock document lines for typing animation ─────────────────────────────────
@@ -703,7 +707,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── SECTION 5: HOW IT WORKS (3-column card grid like live site) ─────── */}
-      <section id="how" style={{ padding: "5rem 1.5rem", background: C.cream, scrollMarginTop: 80 }}>
+      <section id="how" style={{ padding: "5rem 1.5rem", background: C.pastelGreen, scrollMarginTop: 80 }}>
         <div style={{ maxWidth: 1000, margin: "0 auto" }}>
           <Reveal>
             <div style={{ textAlign: "center", marginBottom: 40 }}>
@@ -771,7 +775,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── SECTION 6: FAQ ─────────────────────────────────────────────────── */}
-      <section style={{ padding: "5rem 1.5rem", background: C.peach }}>
+      <section style={{ padding: "5rem 1.5rem", background: C.pastelAmber }}>
         <div style={{ maxWidth: 900, margin: "0 auto" }}>
           <Reveal>
             <h2 style={{ fontSize: 28, fontWeight: 600, color: C.charcoal, textAlign: "center", marginBottom: 4 }}>
@@ -807,7 +811,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── SECTION 7: PRICING (full cards with features like live site) ────── */}
-      <section id="pricing" style={{ padding: "5rem 1.5rem", background: C.cream, scrollMarginTop: 80 }}>
+      <section id="pricing" style={{ padding: "5rem 1.5rem", background: C.pastelBlue, scrollMarginTop: 80 }}>
         <div style={{ maxWidth: 1000, margin: "0 auto" }}>
           <Reveal>
             <div style={{ textAlign: "center", marginBottom: 40 }}>
