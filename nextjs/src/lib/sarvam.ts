@@ -66,6 +66,7 @@ async function callSarvamAPI(
         ],
         max_tokens: maxTokens,
         temperature: 0.3,
+        reasoning_effort: 'low',  // FIX 2026-04-18 BUG-L2: Sarvam 105B reasoning ON by default — without this, ALL tokens consumed by reasoning_content and content=null. 'low' caps reasoning at ~800 tokens, preserves budget for order text.
       }),
       signal: controller.signal,
     });
