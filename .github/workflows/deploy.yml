@@ -7,7 +7,6 @@ on:
     branches: [main]
 
 jobs:
-  # ── Job 1: Type-check + build (runs on every push & PR) ─────────────────────
   build:
     name: Build check
     runs-on: ubuntu-latest
@@ -37,7 +36,6 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
 
-  # ── Job 2: Deploy to VPS (only on push to main, after build passes) ──────────
   deploy:
     name: Deploy to VPS
     runs-on: ubuntu-latest
@@ -56,27 +54,36 @@ jobs:
             set -e
             cd /root/aadesh-ai-src/nextjs
 
-            echo "→ Pull latest code"
+            echo "Pull latest code"
             git pull origin main
 
-            echo "→ Install dependencies"
+            echo "Install dependencies"
             npm install --legacy-peer-deps --prefer-offline
 
-            echo "→ Build"
+            echo "Clean stale build cache"
+            rm -rf .next
+
+            echo "Build"
             npm run build
 
-            echo "→ Sync static assets"
+            echo "Copy standalone runtime (REQUIRED - missing before Apr 18 outage)"
+            cp -r .next/standalone/. /root/aadesh-ai/
+
+            echo "Sync static assets with --delete (prevents stale chunk hash merging)"
             rsync -a --delete .next/static/ /root/aadesh-ai/.next/static/
 
-            echo "→ Restart PM2"
-            pm2 restart aadesh-ai --update-env
+            echo "Copy public assets"
+            cp -r public/. /root/aadesh-ai/public/
 
-            echo "→ Health check"
-            sleep 3
+            echo "Restart PM2"
+            source .env.local && pm2 restart aadesh-ai --update-env
+
+            echo "Health check"
+            sleep 4
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://aadesh-ai.in/api/health)
             if [ "$STATUS" != "200" ]; then
-              echo "Health check FAILED — status $STATUS"
+              echo "Health check FAILED status $STATUS"
               pm2 logs aadesh-ai --lines 30 --nostream
               exit 1
             fi
-            echo "Deploy complete — health $STATUS"
+            echo "Deploy complete health $STATUS"

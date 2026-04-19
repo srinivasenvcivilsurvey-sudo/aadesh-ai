@@ -45,7 +45,7 @@ async function callSarvamAPI(
   systemPrompt: string,
   userContent: string,
   apiKey: string,
-  maxTokens: number = 8192  // FIX 2026-04-09: was 4096, caused 243-word orders. 750 Kannada words ≈ 3000-4000 tokens; 8192 gives safe headroom.
+  maxTokens: number = 4096  // FIX 2026-04-18 BUG-L3: Sarvam starter tier max is 4096, not 8192. Was causing 400 on every call.
 ): Promise<OrderGenerationResponse> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 60_000);
@@ -138,7 +138,7 @@ export async function generateOrder(
   // Attempt 3: reduced context — trim user content to 50% but keep full output token budget
   const reducedDetails = normalizedDetails.slice(0, Math.floor(normalizedDetails.length * 0.5));
   try {
-    return await callSarvamAPI(normalizedPrompt, reducedDetails, apiKey, 8192);  // FIX 2026-04-09: was 2000, causing truncated orders on fallback
+    return await callSarvamAPI(normalizedPrompt, reducedDetails, apiKey, 4096);  // FIX 2026-04-18 BUG-L3: match starter tier limit
   } catch (err3) {
     console.error('Sarvam attempt 3 (reduced) failed:', err3 instanceof Error ? err3.message : err3);
     throw new Error('Sarvam API timeout: all 3 attempts failed');
@@ -271,15 +271,15 @@ export const DEFAULT_SYSTEM_PROMPT = buildSystemPrompt();
 /**
  * Direct Anthropic SDK call for contested appeals (P-0.46 Option A).
  * Replaces OpenRouter path. Features:
- *   - Adaptive thinking (GA on Sonnet 4.6) — replaces deprecated budget_tokens
  *   - Prompt caching on system prompt + reference orders (90% cost reduction)
  *   - Same OrderGenerationResponse interface as Sarvam/OpenRouter paths
+ * FIX 2026-04-18 BUG-L4: Removed effort + thinking:adaptive (API rejects both).
  */
 async function callAnthropicSonnet(
   systemPrompt: string,
   referenceOrders: string,   // cacheable: 5-8 reference orders
   caseInput: string,         // NOT cached: changes every order
-  isAuditCall: boolean,
+  _isAuditCall: boolean,
   apiKey: string
 ): Promise<OrderGenerationResponse> {
   const client = new Anthropic({ apiKey });
@@ -302,13 +302,12 @@ async function callAnthropicSonnet(
     });
   }
 
-  // effort is GA on Sonnet 4.6 but not yet in SDK v0.88 types — extend inline
-  type ParamsWithEffort = Anthropic.Messages.MessageCreateParamsNonStreaming & { effort: string };
-  const createParams: ParamsWithEffort = {
+  // FIX 2026-04-18 BUG-L4: Removed top-level `effort` field — Anthropic API returns
+  // "effort: Extra inputs are not permitted". Removed `thinking: adaptive` too as
+  // it caused unknown param errors. Standard non-thinking call until API stabilises.
+  const createParams: Anthropic.Messages.MessageCreateParamsNonStreaming = {
     model: 'claude-sonnet-4-6',
     max_tokens: 8192,
-    thinking: { type: 'adaptive' },  // Adaptive thinking (P-0.46) — replaces budget_tokens
-    effort: isAuditCall ? 'high' : 'medium',
     system: systemBlocks,
     messages: [{ role: 'user', content: caseInput }],
   };
