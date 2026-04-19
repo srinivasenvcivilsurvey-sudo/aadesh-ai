@@ -1,5 +1,8 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
+# Benchmark outputs (may contain PII — never commit)
+KarnatakaAI/11_DDLR_App/sarvam_vision_test/outputs/
+
 # dependencies
 /node_modules
 /.pnp

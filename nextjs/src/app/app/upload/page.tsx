@@ -21,11 +21,7 @@ export default function UploadOrdersPage() {
     const [isDragging, setIsDragging] = useState(false);
     const locale = 'kn';
 
-    useEffect(() => {
-        if (user?.id) loadFiles();
-    }, [user]);
-
-    const loadFiles = async () => {
+    const loadFiles = useCallback(async () => {
         try {
             setLoading(true);
             setError('');
@@ -43,9 +39,9 @@ export default function UploadOrdersPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [user]);
 
-    const handleFileUpload = async (file: File) => {
+    const handleFileUpload = useCallback(async (file: File) => {
         // Validate file type
         const ext = file.name.split('.').pop()?.toLowerCase();
         if (!['docx', 'pdf'].includes(ext || '')) {
@@ -72,7 +68,11 @@ export default function UploadOrdersPage() {
         } finally {
             setUploading(false);
         }
-    };
+    }, [user, loadFiles]);
+
+    useEffect(() => {
+        if (user?.id) loadFiles();
+    }, [user, loadFiles]);
 
     const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const fileList = event.target.files;
@@ -87,7 +87,7 @@ export default function UploadOrdersPage() {
         setIsDragging(false);
         const droppedFiles = Array.from(e.dataTransfer.files);
         droppedFiles.forEach(f => handleFileUpload(f));
-    }, [user]);
+    }, [handleFileUpload]);
 
     const handleDelete = async () => {
         if (!fileToDelete) return;

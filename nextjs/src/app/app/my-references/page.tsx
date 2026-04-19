@@ -32,11 +32,7 @@ export default function MyReferencesPage() {
 
   const kn = locale === 'kn';
 
-  useEffect(() => {
-    if (user?.id) loadFiles();
-  }, [user]);
-
-  const loadFiles = async () => {
+  const loadFiles = useCallback(async () => {
     try {
       setLoading(true);
       const supabase = createSPAClient();
@@ -56,7 +52,11 @@ export default function MyReferencesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, kn]);
+
+  useEffect(() => {
+    if (user?.id) loadFiles();
+  }, [user, loadFiles]);
 
   // Accuracy score based on file count (20 files = 100%)
   const getAccuracyPercent = (count: number) => Math.min(100, Math.round((count / 20) * 100));
@@ -93,7 +93,50 @@ export default function MyReferencesPage() {
     };
   };
 
-  const handleFileUpload = async (file: File) => {
+  // Defined before handleFileUpload so it can be listed as a stable dep.
+  const triggerPromptGeneration = useCallback(async () => {
+    setGenerating(true);
+    setTrainingProgress(0);
+
+    // Simulate progress: ramp up to 90% over ~30 seconds, then jump to 100% on completion
+    const progressTimer = setInterval(() => {
+      setTrainingProgress(prev => {
+        if (prev >= 90) { clearInterval(progressTimer); return 90; }
+        return prev + 3;
+      });
+    }, 1000);
+
+    try {
+      const token = await getAuthToken();
+      if (!token) return;
+
+      await fetch('/api/references/generate-prompt', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      clearInterval(progressTimer);
+      setTrainingProgress(100);
+
+      setSuccess(kn
+        ? 'AI ನಿಮ್ಮ ಶೈಲಿ ಕಲಿತಿದೆ!'
+        : 'AI has learned your style!');
+      setTimeout(() => setSuccess(''), 5000);
+    } catch {
+      clearInterval(progressTimer);
+      console.error('Prompt generation failed');
+    } finally {
+      setTimeout(() => {
+        setGenerating(false);
+        setTrainingProgress(0);
+      }, 2000);
+    }
+  }, [kn]);
+
+  const handleFileUpload = useCallback(async (file: File) => {
     const ext = file.name.split('.').pop()?.toLowerCase();
     if (!['pdf', 'docx', 'txt'].includes(ext ?? '')) {
       setError(kn ? 'PDF, DOCX, TXT ಫೈಲ್\u200Cಗಳು ಮಾತ್ರ' : 'Only PDF, DOCX, TXT files accepted');
@@ -170,49 +213,7 @@ export default function MyReferencesPage() {
     } finally {
       setUploading(false);
     }
-  };
-
-  const triggerPromptGeneration = async () => {
-    setGenerating(true);
-    setTrainingProgress(0);
-
-    // Simulate progress: ramp up to 90% over ~30 seconds, then jump to 100% on completion
-    const progressTimer = setInterval(() => {
-      setTrainingProgress(prev => {
-        if (prev >= 90) { clearInterval(progressTimer); return 90; }
-        return prev + 3;
-      });
-    }, 1000);
-
-    try {
-      const token = await getAuthToken();
-      if (!token) return;
-
-      await fetch('/api/references/generate-prompt', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      clearInterval(progressTimer);
-      setTrainingProgress(100);
-
-      setSuccess(kn
-        ? 'AI ನಿಮ್ಮ ಶೈಲಿ ಕಲಿತಿದೆ!'
-        : 'AI has learned your style!');
-      setTimeout(() => setSuccess(''), 5000);
-    } catch {
-      clearInterval(progressTimer);
-      console.error('Prompt generation failed');
-    } finally {
-      setTimeout(() => {
-        setGenerating(false);
-        setTrainingProgress(0);
-      }, 2000);
-    }
-  };
+  }, [kn, files, loadFiles, triggerPromptGeneration]);
 
   const handleDelete = async (refId: string) => {
     try {
@@ -262,7 +263,7 @@ export default function MyReferencesPage() {
     }
 
     toUpload.forEach(f => handleFileUpload(f));
-  }, [files, kn]);
+  }, [files, kn, handleFileUpload]);
 
   const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const fileList = event.target.files;

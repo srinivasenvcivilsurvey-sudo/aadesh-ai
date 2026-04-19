@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useGlobal } from '@/lib/context/GlobalContext';
 import { useLanguage } from '@/lib/context/LanguageContext';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -39,11 +39,12 @@ export default function MyOrdersPage() {
   const [downloading, setDownloading] = useState(false);
   const limit = 20;
 
-  useEffect(() => {
-    if (user?.id) loadOrders();
-  }, [user, page, sortBy, sortDir]);
+  // Keep a ref to the latest search value so the memoised loadOrders
+  // always reads the current search without becoming a dep of the effect.
+  const searchRef = useRef(search);
+  searchRef.current = search;
 
-  const loadOrders = async () => {
+  const loadOrders = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
@@ -59,7 +60,7 @@ export default function MyOrdersPage() {
         limit: limit.toString(),
         sort: sortBy,
         dir: sortDir,
-        ...(search ? { search } : {}),
+        ...(searchRef.current ? { search: searchRef.current } : {}),
       });
 
       const response = await fetch(`/api/orders?${params}`, {
@@ -76,7 +77,11 @@ export default function MyOrdersPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, sortBy, sortDir, locale]);
+
+  useEffect(() => {
+    if (user?.id) loadOrders();
+  }, [user, page, sortBy, sortDir, loadOrders]);
 
   const handleSearch = () => {
     setPage(1);

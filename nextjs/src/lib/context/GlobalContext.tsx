@@ -1,7 +1,7 @@
 // src/lib/context/GlobalContext.tsx
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { createSPASassClient } from '@/lib/supabase/client';
 
 type User = {
@@ -24,7 +24,7 @@ export function GlobalProvider({ children }: { children: React.ReactNode }) {
     const [loading, setLoading] = useState(true);
     const [user, setUser] = useState<User | null>(null);
 
-    const loadProfile = async () => {
+    const loadProfile = useCallback(async () => {
         try {
             const supabase = await createSPASassClient();
             const client = supabase.getSupabaseClient();
@@ -52,12 +52,11 @@ export function GlobalProvider({ children }: { children: React.ReactNode }) {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
     useEffect(() => {
         loadProfile();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [loadProfile]);
 
     const refreshProfile = async () => {
         await loadProfile();

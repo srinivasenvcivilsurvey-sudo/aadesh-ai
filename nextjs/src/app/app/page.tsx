@@ -35,7 +35,7 @@ export default function DashboardContent() {
             }
         }
         if (user?.id) loadFileCount();
-    }, [user?.id]);
+    }, [user]);
 
     useEffect(() => {
         async function loadRefs() {
@@ -48,7 +48,7 @@ export default function DashboardContent() {
             setRefLoading(false);
         }
         if (user?.id) loadRefs();
-    }, [user?.id]);
+    }, [user]);
 
     const getDaysSinceRegistration = () => {
         if (!user?.registered_at) return 0;
