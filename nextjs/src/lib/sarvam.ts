@@ -350,6 +350,16 @@ const SARVAM_DOC_INTEL_MAX_POLL_MS = 100_000; // 100s per chunk max
 
 interface SarvamDocIntelJob { id?: string; job_id?: string }
 interface SarvamDocIntelStatus { job_state?: string; status?: string; state?: string }
+interface SarvamUploadUrls {
+  upload_urls?: Record<string, { file_url?: string }>;
+}
+interface SarvamDownloadUrls {
+  // Shape varies; common patterns:
+  //  - { download_urls: { "output.zip": { file_url } } }
+  //  - { files: [{ name, file_url }] }
+  download_urls?: Record<string, { file_url?: string }>;
+  files?: Array<{ name?: string; file_url?: string; url?: string }>;
+}
 
 /**
  * Minimal ZIP extractor — handles store (0) and deflate (8) compression.
@@ -391,44 +401,73 @@ export async function callSarvamDocIntelChunk(
   pdfBase64: string,
   apiKey: string
 ): Promise<string> {
-  // Endpoints verified against docs.sarvam.ai 2026-04-19
-  // Base: https://api.sarvam.ai (no /v1 prefix for document-intelligence)
-  // Flow: POST /document-intelligence/create-job → POST /{id}/upload (multipart)
-  //       → POST /{id}/start → GET /{id}/status → GET /{id}/download
+  // Endpoints verified 2026-04-19 against sarvamai Python SDK source
+  // (site-packages/sarvamai/document_intelligence/{raw_client,client}.py).
+  // Docs page is stale; SDK is authoritative. Live VPS curl returned HTTP 202.
+  // Base: https://api.sarvam.ai
+  // Flow:
+  //   1. POST  /doc-digitization/job/v1                              → { job_id }
+  //   2. POST  /doc-digitization/job/v1/upload-files                 → { upload_urls: { "<file>": { file_url } } }
+  //   3. PUT   <azure presigned file_url>  (bytes, Azure Blob headers)
+  //   4. POST  /doc-digitization/job/v1/{job_id}/start
+  //   5. GET   /doc-digitization/job/v1/{job_id}/status              → { job_state }
+  //   6. POST  /doc-digitization/job/v1/{job_id}/download-files      → presigned download URL(s) → fetch bytes → unzip
   const authHeaders = { 'api-subscription-key': apiKey };
+  const FILENAME = 'document.pdf';
+  const JOB_BASE = `${SARVAM_DOC_INTEL_BASE}/doc-digitization/job/v1`;
 
   // 1. Create job
-  const createRes = await fetch(`${SARVAM_DOC_INTEL_BASE}/document-intelligence/create-job`, {
+  const createRes = await fetch(JOB_BASE, {
     method: 'POST',
     headers: { ...authHeaders, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ language: 'kn-IN', output_format: 'md' }),
+    body: JSON.stringify({
+      job_parameters: { language: 'kn-IN', output_format: 'md' },
+      callback: null,
+    }),
   });
   if (!createRes.ok) {
     const errText = await createRes.text().catch(() => '');
     throw new Error(`[Sarvam DocIntel] create failed (${createRes.status}): ${errText.slice(0, 300)}`);
   }
   const jobData = await createRes.json() as SarvamDocIntelJob;
-  const jobId   = jobData.id ?? jobData.job_id;
+  const jobId = jobData.job_id ?? jobData.id;
   if (!jobId) throw new Error(`[Sarvam DocIntel] no job ID: ${JSON.stringify(jobData).slice(0, 200)}`);
   console.log(`[Sarvam DocIntel] job created: ${jobId}`);
 
-  // 2. Upload PDF as multipart form-data (field name: file)
-  const pdfBytes = Buffer.from(pdfBase64, 'base64');
-  const form = new FormData();
-  form.append('file', new Blob([new Uint8Array(pdfBytes)], { type: 'application/pdf' }), 'document.pdf');
-  const uploadRes = await fetch(`${SARVAM_DOC_INTEL_BASE}/document-intelligence/${jobId}/upload`, {
+  // 2. Get presigned Azure Blob upload URL
+  const uploadUrlRes = await fetch(`${JOB_BASE}/upload-files`, {
     method: 'POST',
-    headers: authHeaders, // fetch sets Content-Type with boundary automatically
-    body: form,
+    headers: { ...authHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ job_id: jobId, files: [FILENAME] }),
   });
-  if (!uploadRes.ok) {
-    const errText = await uploadRes.text().catch(() => '');
-    throw new Error(`[Sarvam DocIntel] upload failed (${uploadRes.status}): ${errText.slice(0, 300)}`);
+  if (!uploadUrlRes.ok) {
+    const errText = await uploadUrlRes.text().catch(() => '');
+    throw new Error(`[Sarvam DocIntel] upload-files failed (${uploadUrlRes.status}): ${errText.slice(0, 300)}`);
   }
-  console.log(`[Sarvam DocIntel] uploaded ${pdfBytes.length} bytes`);
+  const uploadUrlData = await uploadUrlRes.json() as SarvamUploadUrls;
+  const presignedUpload = uploadUrlData.upload_urls?.[FILENAME]?.file_url;
+  if (!presignedUpload) {
+    throw new Error(`[Sarvam DocIntel] no upload URL in response: ${JSON.stringify(uploadUrlData).slice(0, 300)}`);
+  }
 
-  // 3. Start job
-  const startRes = await fetch(`${SARVAM_DOC_INTEL_BASE}/document-intelligence/${jobId}/start`, {
+  // 3. PUT PDF bytes to Azure Blob Storage
+  const pdfBytes = Buffer.from(pdfBase64, 'base64');
+  const putRes = await fetch(presignedUpload, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/pdf',
+      'x-ms-blob-type': 'BlockBlob',
+    },
+    body: new Uint8Array(pdfBytes),
+  });
+  if (!putRes.ok) {
+    const errText = await putRes.text().catch(() => '');
+    throw new Error(`[Sarvam DocIntel] Azure PUT failed (${putRes.status}): ${errText.slice(0, 300)}`);
+  }
+  console.log(`[Sarvam DocIntel] uploaded ${pdfBytes.length} bytes to Azure Blob`);
+
+  // 4. Start job
+  const startRes = await fetch(`${JOB_BASE}/${jobId}/start`, {
     method: 'POST',
     headers: authHeaders,
   });
@@ -438,32 +477,64 @@ export async function callSarvamDocIntelChunk(
   }
   console.log('[Sarvam DocIntel] job started');
 
-  // 4. Poll /status until complete or timeout
+  // 5. Poll /status until terminal state or timeout
+  // Terminal states per SDK: Completed, PartiallyCompleted, Failed
   const pollDeadline = Date.now() + SARVAM_DOC_INTEL_MAX_POLL_MS;
   let lastState = 'unknown';
   while (Date.now() < pollDeadline) {
     await new Promise(r => setTimeout(r, SARVAM_DOC_INTEL_POLL_MS));
-    const pollRes = await fetch(`${SARVAM_DOC_INTEL_BASE}/document-intelligence/${jobId}/status`, {
-      headers: authHeaders,
-    });
+    const pollRes = await fetch(`${JOB_BASE}/${jobId}/status`, { headers: authHeaders });
     if (!pollRes.ok) throw new Error(`[Sarvam DocIntel] poll failed (${pollRes.status})`);
     const statusData = await pollRes.json() as SarvamDocIntelStatus;
     lastState = statusData.job_state ?? statusData.status ?? statusData.state ?? 'unknown';
     console.log(`[Sarvam DocIntel] state: ${lastState}`);
     const s = lastState.toLowerCase();
-    if (s === 'completed' || s === 'success') break;
+    if (s === 'completed' || s === 'partiallycompleted' || s === 'success') break;
     if (s === 'failed' || s === 'error') throw new Error(`[Sarvam DocIntel] job failed (state: ${lastState})`);
   }
-  if (!['completed', 'success'].includes(lastState.toLowerCase())) {
+  const terminalOk = ['completed', 'partiallycompleted', 'success'];
+  if (!terminalOk.includes(lastState.toLowerCase())) {
     throw new Error(`[Sarvam DocIntel] timeout (last state: ${lastState})`);
   }
 
-  // 5. Download output
-  const dlRes = await fetch(`${SARVAM_DOC_INTEL_BASE}/document-intelligence/${jobId}/download`, {
-    headers: authHeaders,
+  // 6. Get presigned download URL(s)
+  const dlUrlRes = await fetch(`${JOB_BASE}/${jobId}/download-files`, {
+    method: 'POST',
+    headers: { ...authHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ job_id: jobId }),
   });
-  if (!dlRes.ok) throw new Error(`[Sarvam DocIntel] download failed (${dlRes.status})`);
-  const rawBytes = Buffer.from(await dlRes.arrayBuffer());
+  if (!dlUrlRes.ok) {
+    const errText = await dlUrlRes.text().catch(() => '');
+    throw new Error(`[Sarvam DocIntel] download-files failed (${dlUrlRes.status}): ${errText.slice(0, 300)}`);
+  }
+  const dlUrlData = await dlUrlRes.json() as SarvamDownloadUrls;
+
+  // Collect candidate URLs from either shape
+  const candidateUrls: string[] = [];
+  if (dlUrlData.download_urls) {
+    for (const v of Object.values(dlUrlData.download_urls)) {
+      if (v?.file_url) candidateUrls.push(v.file_url);
+    }
+  }
+  if (Array.isArray(dlUrlData.files)) {
+    for (const f of dlUrlData.files) {
+      const u = f.file_url ?? f.url;
+      if (u) candidateUrls.push(u);
+    }
+  }
+  if (candidateUrls.length === 0) {
+    throw new Error(`[Sarvam DocIntel] no download URL in response: ${JSON.stringify(dlUrlData).slice(0, 300)}`);
+  }
+
+  // Prefer .zip or .md/.txt URL; fall back to first
+  const preferred =
+    candidateUrls.find(u => /\.zip(\?|$)/i.test(u)) ??
+    candidateUrls.find(u => /\.(md|txt)(\?|$)/i.test(u)) ??
+    candidateUrls[0];
+
+  const fileRes = await fetch(preferred);
+  if (!fileRes.ok) throw new Error(`[Sarvam DocIntel] download fetch failed (${fileRes.status})`);
+  const rawBytes = Buffer.from(await fileRes.arrayBuffer());
 
   // Detect ZIP magic bytes (PK\x03\x04)
   if (rawBytes.length > 4 && rawBytes[0] === 0x50 && rawBytes[1] === 0x4B) {
