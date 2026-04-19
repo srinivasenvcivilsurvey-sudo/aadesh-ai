@@ -338,6 +338,162 @@ async function callAnthropicSonnet(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// P0 Cost Control — Sarvam Document Intelligence (OCR for scanned PDFs)
+// API: async job flow — create → upload → start → poll → download
+// Auth: api-subscription-key header (Sarvam's auth scheme)
+// Cost: ₹1.50/page (paise: 150/page)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SARVAM_DOC_INTEL_BASE = 'https://api.sarvam.ai';
+const SARVAM_DOC_INTEL_POLL_MS = 3_000;
+const SARVAM_DOC_INTEL_MAX_POLL_MS = 100_000; // 100s per chunk max
+
+interface SarvamDocIntelJob { id?: string; job_id?: string }
+interface SarvamDocIntelStatus { job_state?: string; status?: string; state?: string }
+
+/**
+ * Minimal ZIP extractor — handles store (0) and deflate (8) compression.
+ * Returns first .md or .txt file text, or null if not found.
+ * Used because Sarvam Doc Intelligence sometimes returns a ZIP archive.
+ */
+function extractFirstTextFromZip(zipBuf: Buffer): string | null {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const zlib = require('zlib') as typeof import('zlib');
+  let offset = 0;
+  while (offset + 30 < zipBuf.length) {
+    if (zipBuf.readUInt32LE(offset) !== 0x04034B50) break; // not local file header
+    const compressionMethod = zipBuf.readUInt16LE(offset + 8);
+    const compressedSize    = zipBuf.readUInt32LE(offset + 18);
+    const fileNameLength    = zipBuf.readUInt16LE(offset + 26);
+    const extraFieldLength  = zipBuf.readUInt16LE(offset + 28);
+    const fileName          = zipBuf.subarray(offset + 30, offset + 30 + fileNameLength).toString('utf-8');
+    const dataStart         = offset + 30 + fileNameLength + extraFieldLength;
+    const compressedData    = zipBuf.subarray(dataStart, dataStart + compressedSize);
+
+    if (fileName.endsWith('.md') || fileName.endsWith('.txt')) {
+      try {
+        if (compressionMethod === 0) return compressedData.toString('utf-8');
+        if (compressionMethod === 8) return zlib.inflateRawSync(compressedData).toString('utf-8');
+      } catch { /* skip this file, try next */ }
+    }
+    offset = dataStart + compressedSize;
+  }
+  return null;
+}
+
+/**
+ * OCR one PDF chunk (≤10 pages) via Sarvam Document Intelligence.
+ * Async job flow: create → upload → start → poll → download.
+ * Returns extracted markdown text.
+ * Throws on any failure — caller should fall back to Claude Vision.
+ */
+export async function callSarvamDocIntelChunk(
+  pdfBase64: string,
+  apiKey: string
+): Promise<string> {
+  const authHeaders = { 'api-subscription-key': apiKey };
+
+  // 1. Create job
+  const createRes = await fetch(`${SARVAM_DOC_INTEL_BASE}/v1/document-intelligence/create`, {
+    method: 'POST',
+    headers: { ...authHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ language: 'kn-IN', output_format: 'md' }),
+  });
+  if (!createRes.ok) {
+    const errText = await createRes.text().catch(() => '');
+    throw new Error(`[Sarvam DocIntel] create failed (${createRes.status}): ${errText.slice(0, 300)}`);
+  }
+  const jobData = await createRes.json() as SarvamDocIntelJob;
+  const jobId   = jobData.id ?? jobData.job_id;
+  if (!jobId) throw new Error(`[Sarvam DocIntel] no job ID: ${JSON.stringify(jobData).slice(0, 200)}`);
+  console.log(`[Sarvam DocIntel] job created: ${jobId}`);
+
+  // 2. Upload PDF bytes
+  const pdfBytes = Buffer.from(pdfBase64, 'base64');
+  const uploadRes = await fetch(`${SARVAM_DOC_INTEL_BASE}/v1/document-intelligence/${jobId}/upload`, {
+    method: 'PUT',
+    headers: { ...authHeaders, 'Content-Type': 'application/pdf' },
+    body: pdfBytes,
+  });
+  if (!uploadRes.ok) {
+    const errText = await uploadRes.text().catch(() => '');
+    throw new Error(`[Sarvam DocIntel] upload failed (${uploadRes.status}): ${errText.slice(0, 300)}`);
+  }
+  console.log(`[Sarvam DocIntel] uploaded ${pdfBytes.length} bytes`);
+
+  // 3. Start job
+  const startRes = await fetch(`${SARVAM_DOC_INTEL_BASE}/v1/document-intelligence/${jobId}/start`, {
+    method: 'POST',
+    headers: authHeaders,
+  });
+  if (!startRes.ok) {
+    const errText = await startRes.text().catch(() => '');
+    throw new Error(`[Sarvam DocIntel] start failed (${startRes.status}): ${errText.slice(0, 300)}`);
+  }
+  console.log('[Sarvam DocIntel] job started');
+
+  // 4. Poll until complete or timeout
+  const pollDeadline = Date.now() + SARVAM_DOC_INTEL_MAX_POLL_MS;
+  let lastState = 'unknown';
+  while (Date.now() < pollDeadline) {
+    await new Promise(r => setTimeout(r, SARVAM_DOC_INTEL_POLL_MS));
+    const pollRes = await fetch(`${SARVAM_DOC_INTEL_BASE}/v1/document-intelligence/${jobId}`, {
+      headers: authHeaders,
+    });
+    if (!pollRes.ok) throw new Error(`[Sarvam DocIntel] poll failed (${pollRes.status})`);
+    const statusData = await pollRes.json() as SarvamDocIntelStatus;
+    lastState = statusData.job_state ?? statusData.status ?? statusData.state ?? 'unknown';
+    console.log(`[Sarvam DocIntel] state: ${lastState}`);
+    const s = lastState.toLowerCase();
+    if (s === 'completed' || s === 'success') break;
+    if (s === 'failed' || s === 'error') throw new Error(`[Sarvam DocIntel] job failed (state: ${lastState})`);
+  }
+  if (!['completed', 'success'].includes(lastState.toLowerCase())) {
+    throw new Error(`[Sarvam DocIntel] timeout (last state: ${lastState})`);
+  }
+
+  // 5. Download output
+  const dlRes = await fetch(`${SARVAM_DOC_INTEL_BASE}/v1/document-intelligence/${jobId}/download`, {
+    headers: authHeaders,
+  });
+  if (!dlRes.ok) throw new Error(`[Sarvam DocIntel] download failed (${dlRes.status})`);
+  const rawBytes = Buffer.from(await dlRes.arrayBuffer());
+
+  // Detect ZIP magic bytes (PK\x03\x04)
+  if (rawBytes.length > 4 && rawBytes[0] === 0x50 && rawBytes[1] === 0x4B) {
+    const text = extractFirstTextFromZip(rawBytes);
+    if (text !== null) {
+      console.log(`[Sarvam DocIntel] extracted ${text.length} chars from ZIP`);
+      return text;
+    }
+    throw new Error('[Sarvam DocIntel] ZIP had no readable .md/.txt file');
+  }
+
+  const text = rawBytes.toString('utf-8');
+  console.log(`[Sarvam DocIntel] extracted ${text.length} chars`);
+  return text;
+}
+
+/**
+ * Call Sarvam 105B to convert extracted document text into structured JSON.
+ * Used as the extraction step after OCR (Sarvam Doc Intelligence or mammoth).
+ * systemPrompt must instruct Sarvam to return JSON — same as VISION_SYSTEM_PROMPT.
+ */
+export async function callSarvamTextToJson(
+  documentText: string,
+  systemPrompt: string,
+  apiKey: string
+): Promise<string> {
+  const result = await callSarvamAPI(
+    systemPrompt,
+    `Case file document text:\n\n${documentText}\n\nPlease analyze this case file and return the structured JSON as specified.`,
+    apiKey,
+    4096
+  );
+  return result.content;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // P-0.47 — Structured Outputs: Clarifying Questions
 // ─────────────────────────────────────────────────────────────────────────────
 

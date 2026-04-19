@@ -1,34 +1,46 @@
 /**
  * POST /api/pipeline/vision-read
- * Reads a case file using Claude Sonnet Vision and returns a structured summary + questions.
- * Images are held in memory only â€” never written to disk or stored in Supabase.
+ * Reads a case file and returns a structured summary + questions.
+ *
+ * PRIMARY path (P0 Cost Control — Sarvam saves ₹40+ per call vs Anthropic):
+ *   PDF  → Sarvam Document Intelligence OCR (chunked ≤10 pages) → Sarvam 105B extraction
+ *   DOCX → mammoth text extraction → Sarvam 105B extraction
+ *
+ * FALLBACK path (when Sarvam fails or key missing):
+ *   PDF/Image → Claude Vision (existing logic, needs ANTHROPIC_API_KEY with credits)
+ *   DOCX      → Claude text analysis
  *
  * Properties validated:
  *   4: Vision_Reader sends all pages to the API
  *   5: Case summary always contains all required fields
  *   6: Vision_Reader always returns 4 to 5 questions
  *
- * v9.2 security additions:
- *   - Bearer token auth via Supabase (Fix 2)
- *   - Retry logic: 2 retries with 2s delay on network errors, not rate limits (Fix 2)
- *   - Credit check before allowing vision read (Fix 12)
- *   - PDF sent as application/pdf with Anthropic beta header (Fix 15)
+ * v10.0 — P0 Cost Control:
+ *   - Sarvam Document Intelligence as primary for PDFs (10-page chunks, parallel)
+ *   - Sarvam 105B for structured JSON extraction (text → JSON)
+ *   - pdf-lib for 10-page chunking
+ *   - Cost logging in paise: ₹1.50/page = 150 paise/page
+ *   - LLM_PRIMARY env var (default: sarvam; set to 'claude' to force Claude-only)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
-import type { CaseSummary, VisionReadResponse } from '@/lib/pipeline/types';
+import { PDFDocument } from 'pdf-lib';
 import mammoth from 'mammoth';
+import type { CaseSummary, VisionReadResponse } from '@/lib/pipeline/types';
 import { checkDailyLimit, formatResetTime } from '@/lib/pipeline/rateLimiter';
 import { checkIpLimit } from '@/lib/ipRateLimiter';
+import { callSarvamDocIntelChunk, callSarvamTextToJson } from '@/lib/sarvam';
 
-const VISION_MODEL = 'claude-sonnet-4-6';
-const VISION_TIMEOUT_MS = 60_000;
-const MAX_RETRIES = 2;
-const RETRY_DELAY_MS = 2_000;
+const VISION_MODEL          = 'claude-sonnet-4-6';
+const VISION_TIMEOUT_MS     = 60_000;       // Claude Vision fallback timeout
+const SARVAM_PAGE_CAP       = 10;           // Sarvam Doc Intelligence max pages per job
+const SARVAM_CHUNK_STAGGER  = 1_500;        // ms stagger between parallel chunk starts
+const MAX_RETRIES           = 2;
+const RETRY_DELAY_MS        = 2_000;
 
-const VISION_SYSTEM_PROMPT = `You are an AI assistant for Karnataka government officers. 
+const VISION_SYSTEM_PROMPT = `You are an AI assistant for Karnataka government officers.
 Read the provided case file pages and extract structured information.
 Return ONLY valid JSON in this exact format, no other text:
 {
@@ -62,6 +74,55 @@ function isRateLimitError(err: unknown): boolean {
   return false;
 }
 
+// ── PDF chunking via pdf-lib ──────────────────────────────────────────────────
+
+async function splitPdfBase64(
+  pdfBase64: string,
+  maxPages: number
+): Promise<{ chunks: string[]; pageCount: number }> {
+  const pdfBytes  = Buffer.from(pdfBase64, 'base64');
+  const pdfDoc    = await PDFDocument.load(pdfBytes);
+  const pageCount = pdfDoc.getPageCount();
+
+  if (pageCount <= maxPages) return { chunks: [pdfBase64], pageCount };
+
+  const chunks: string[] = [];
+  for (let start = 0; start < pageCount; start += maxPages) {
+    const chunkDoc = await PDFDocument.create();
+    const count    = Math.min(maxPages, pageCount - start);
+    const indices  = Array.from({ length: count }, (_, i) => start + i);
+    const pages    = await chunkDoc.copyPages(pdfDoc, indices);
+    pages.forEach((p: import('pdf-lib').PDFPage) => chunkDoc.addPage(p));
+    const chunkBytes = await chunkDoc.save();
+    chunks.push(Buffer.from(chunkBytes).toString('base64'));
+  }
+  return { chunks, pageCount };
+}
+
+// ── Sarvam Vision orchestrator ────────────────────────────────────────────────
+
+async function callSarvamVisionOCR(
+  pdfBase64: string,
+  sarvamApiKey: string
+): Promise<{ ocrText: string; pageCount: number; chunkCount: number }> {
+  const { chunks, pageCount } = await splitPdfBase64(pdfBase64, SARVAM_PAGE_CAP);
+  console.log(`[vision-read] Sarvam OCR: ${pageCount} pages → ${chunks.length} chunk(s)`);
+
+  // Parallel with staggered starts (avoids hitting Sarvam rate limit)
+  const chunkTexts = await Promise.all(
+    chunks.map(async (chunk, i) => {
+      if (i > 0) await sleep(i * SARVAM_CHUNK_STAGGER);
+      console.log(`[vision-read] Sarvam chunk ${i + 1}/${chunks.length} start`);
+      return callSarvamDocIntelChunk(chunk, sarvamApiKey);
+    })
+  );
+
+  const ocrText = chunkTexts.join('\n\n--- PAGE BREAK ---\n\n');
+  return { ocrText, pageCount, chunkCount: chunks.length };
+}
+
+// ── Main handler ──────────────────────────────────────────────────────────────
+
 export async function POST(request: NextRequest): Promise<NextResponse> {
   // FIX C9: IP rate limit BEFORE auth
   const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
@@ -90,15 +151,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'ಅನಧಿಕೃತ / Unauthorized' }, { status: 401 });
   }
 
-  // â”€â”€ Credit check (Fix 12) â€” don't deduct, just gate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  // Admin client for credit + rate-limit gate (service role key required)
+  // ── Credit + rate-limit check ─────────────────────────────────────────────────
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const adminClient = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     serviceRoleKey ?? 'missing-service-role-key'
   );
 
-  // Credit check: fail open if service role key is not configured
   if (!serviceRoleKey) {
     console.warn('[vision-read] SUPABASE_SERVICE_ROLE_KEY not set — skipping credit+rate-limit gate');
   } else {
@@ -118,15 +177,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Rate limit check
     const rateLimit = await checkDailyLimit(user.id, adminClient);
     if (!rateLimit.allowed) {
       const resetTime = formatResetTime(rateLimit.resetAt);
       return NextResponse.json(
-        {
-          error: `Daily limit reached. Try again after ${resetTime}.`,
-          code: 'RATE_LIMIT_DAILY',
-        },
+        { error: `Daily limit reached. Try again after ${resetTime}.`, code: 'RATE_LIMIT_DAILY' },
         { status: 429 }
       );
     }
@@ -148,7 +203,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // v10: resolve file bytes — prefer Supabase Storage path over legacy base64
+    // Download from Supabase Storage or use legacy base64
     let fileBase64: string;
     if (storagePath) {
       if (!serviceRoleKey) {
@@ -176,19 +231,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       fileBase64 = legacyBase64!;
     }
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      console.error('ANTHROPIC_API_KEY not configured');
-      return NextResponse.json(
-        { error: 'ಸರ್ವರ್ ಕಾನ್ಫಿಗರೇಶನ್ ದೋಷ / Server configuration error' },
-        { status: 500 }
-      );
-    }
-
-    const client = new Anthropic({ apiKey });
     const isDocx = mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    const isPdf  = mimeType === 'application/pdf';
 
-    // -- DOCX: extract text with mammoth instead of sending as image ----------------
+    // ── DOCX: extract text with mammoth ────────────────────────────────────────
     let docxText: string | null = null;
     if (isDocx) {
       const buffer = Buffer.from(fileBase64, 'base64');
@@ -202,83 +248,141 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       docxText = extracted.value;
     }
 
-    const imageContent = isDocx ? [] : buildImageContent(fileBase64, mimeType);
+    // LLM_PRIMARY defaults to 'sarvam' (Anthropic credits depleted — P0 Cost Control).
+    // Override: set LLM_PRIMARY=claude in VPS env to force Claude-only mode.
+    const llmPrimary  = process.env.LLM_PRIMARY ?? 'sarvam';
+    const sarvamKey   = process.env.SARVAM_API_KEY;
+    const useSarvam   = llmPrimary !== 'claude' && !!sarvamKey;
 
-    // â”€â”€ Call with retry logic (Fix 2) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     let rawResponse = '';
-    let lastError: unknown;
 
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), VISION_TIMEOUT_MS);
-
+    // ════════════════════════════════════════════════════════════════════════════
+    // PRIMARY PATH: Sarvam (₹1.50/page for PDFs; free for DOCX text extraction)
+    // ════════════════════════════════════════════════════════════════════════════
+    if (useSarvam) {
       try {
-        const isPdf = mimeType === 'application/pdf';
-        const response = await client.messages.create(
-          {
-            model: VISION_MODEL,
-            max_tokens: 4096,
-            system: VISION_SYSTEM_PROMPT,
-            messages: [
-              {
-                role: 'user',
-                content: docxText
-                  ? [
-                      { type: 'text' as const, text: `Case file document text:\n\n${docxText}` },
-                      { type: 'text' as const, text: 'Please analyze this case file and return the structured JSON as specified.' },
-                    ]
-                  : [
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      ...(imageContent as any[]),
-                      { type: 'text' as const, text: 'Please analyze this case file and return the structured JSON as specified.' },
-                    ],
-              },
-            ],
-          },
-          isPdf ? { headers: { 'anthropic-beta': 'pdfs-2024-09-25' } } : undefined
-        );
+        let extractedText: string;
+        let pageCount = 0;
+        let chunkCount = 1;
 
-        rawResponse = response.content
-          .filter(block => block.type === 'text')
-          .map(block => (block as { type: 'text'; text: string }).text)
-          .join('');
-
-        clearTimeout(timeout);
-        break; // success â€” exit retry loop
-      } catch (err) {
-        clearTimeout(timeout);
-        lastError = err;
-
-        // Don't retry rate limit errors
-        if (isRateLimitError(err)) {
-          throw err;
+        if (isPdf) {
+          // PDF → Sarvam Document Intelligence OCR (async job, 10-page chunks)
+          const t0 = Date.now();
+          const ocr = await callSarvamVisionOCR(fileBase64, sarvamKey!);
+          extractedText = ocr.ocrText;
+          pageCount     = ocr.pageCount;
+          chunkCount    = ocr.chunkCount;
+          const costPaise = pageCount * 150; // ₹1.50 = 150 paise per page
+          console.log(
+            `[vision-read] provider=sarvam pages=${pageCount} chunks=${chunkCount} ` +
+            `cost=₹${(costPaise / 100).toFixed(2)} elapsed=${Date.now() - t0}ms`
+          );
+        } else if (isDocx && docxText) {
+          // DOCX already extracted by mammoth — skip OCR step
+          extractedText = docxText;
+          console.log('[vision-read] provider=sarvam source=mammoth docxChars=' + extractedText.length);
+        } else {
+          // Images (JPG/PNG) — Sarvam 105B is text-only; cannot do image OCR
+          throw new Error('Sarvam: image files require Claude Vision — skipping to fallback');
         }
 
-        // Don't retry on last attempt
-        if (attempt < MAX_RETRIES) {
-          await sleep(RETRY_DELAY_MS);
-        }
+        // Sarvam 105B: text → structured JSON (same VISION_SYSTEM_PROMPT as Claude)
+        rawResponse = await callSarvamTextToJson(extractedText, VISION_SYSTEM_PROMPT, sarvamKey!);
+        console.log('[vision-read] Sarvam extraction complete, rawLen=' + rawResponse.length);
+
+      } catch (sarvamErr) {
+        const msg = sarvamErr instanceof Error ? sarvamErr.message : String(sarvamErr);
+        console.warn('[vision-read] Sarvam primary failed — falling back to Claude:', msg);
+        rawResponse = ''; // ensure fallback runs
       }
     }
 
+    // ════════════════════════════════════════════════════════════════════════════
+    // FALLBACK PATH: Claude Vision
+    // Runs when: Sarvam failed, LLM_PRIMARY=claude, no SARVAM_API_KEY, or image files
+    // ════════════════════════════════════════════════════════════════════════════
     if (!rawResponse) {
-      throw lastError ?? new Error('Vision API returned empty response');
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) {
+        console.error('[vision-read] No ANTHROPIC_API_KEY — both Sarvam and Claude unavailable');
+        return NextResponse.json(
+          { error: 'ಸರ್ವರ್ ಕಾನ್ಫಿಗರೇಶನ್ ದೋಷ / Server configuration error' },
+          { status: 500 }
+        );
+      }
+
+      const client       = new Anthropic({ apiKey });
+      const imageContent = isDocx ? [] : buildImageContent(fileBase64, mimeType);
+      let lastError: unknown;
+
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        const controller = new AbortController();
+        const timeout    = setTimeout(() => controller.abort(), VISION_TIMEOUT_MS);
+
+        try {
+          const label = useSarvam ? 'claude-fallback' : 'claude';
+          console.log(`[vision-read] provider=${label} attempt=${attempt + 1}`);
+
+          const response = await client.messages.create(
+            {
+              model: VISION_MODEL,
+              max_tokens: 4096,
+              system: VISION_SYSTEM_PROMPT,
+              messages: [
+                {
+                  role: 'user',
+                  content: docxText
+                    ? [
+                        { type: 'text' as const, text: `Case file document text:\n\n${docxText}` },
+                        { type: 'text' as const, text: 'Please analyze this case file and return the structured JSON as specified.' },
+                      ]
+                    : [
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        ...(imageContent as any[]),
+                        { type: 'text' as const, text: 'Please analyze this case file and return the structured JSON as specified.' },
+                      ],
+                },
+              ],
+            },
+            isPdf ? { headers: { 'anthropic-beta': 'pdfs-2024-09-25' } } : undefined
+          );
+
+          rawResponse = response.content
+            .filter(block => block.type === 'text')
+            .map(block => (block as { type: 'text'; text: string }).text)
+            .join('');
+
+          clearTimeout(timeout);
+          break; // success — exit retry loop
+
+        } catch (err) {
+          clearTimeout(timeout);
+          lastError = err;
+          if (isRateLimitError(err)) throw err; // never retry rate limits
+          if (attempt < MAX_RETRIES) await sleep(RETRY_DELAY_MS);
+        }
+      }
+
+      if (!rawResponse) {
+        throw lastError ?? new Error('Vision API returned empty response');
+      }
     }
 
-    // Parse and validate the JSON response
+    // ── Parse and validate response ──────────────────────────────────────────────
     const parsed = parseCaseSummary(rawResponse);
     const result: VisionReadResponse = {
       caseSummary: {
-        caseType: parsed.caseType,
-        parties: parsed.parties,
-        keyFacts: parsed.keyFacts,
+        caseType:     parsed.caseType,
+        parties:      parsed.parties,
+        keyFacts:     parsed.keyFacts,
         reliefSought: parsed.reliefSought,
       },
       questions: parsed.questions,
-      caseType: parsed.caseType,
+      caseType:  parsed.caseType,
     };
 
     return NextResponse.json(result);
+
   } catch (err) {
     console.error('Vision read error:', err);
     const message = err instanceof Error && err.name === 'AbortError'
@@ -288,7 +392,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 }
 
-// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 type AnthropicImageMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
 
@@ -306,62 +410,36 @@ function buildImageContent(
   fileBase64: string,
   mimeType: string
 ): Array<ImageBlock | DocumentBlock> {
-  // PDFs: send as application/pdf with Anthropic beta (Fix 15)
   if (mimeType === 'application/pdf') {
-    return [{
-      type: 'document',
-      source: {
-        type: 'base64',
-        media_type: 'application/pdf',
-        data: fileBase64,
-      },
-    }];
+    return [{ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: fileBase64 } }];
   }
-
-  // Images (JPG/PNG): single image block
   if (mimeType === 'image/jpeg' || mimeType === 'image/png') {
-    return [{
-      type: 'image',
-      source: {
-        type: 'base64',
-        media_type: mimeType as AnthropicImageMediaType,
-        data: fileBase64,
-      },
-    }];
+    return [{ type: 'image', source: { type: 'base64', media_type: mimeType as AnthropicImageMediaType, data: fileBase64 } }];
   }
-
-  // DOCX: handled via mammoth text extraction in POST handler (not via Vision)
   return [];
 }
 
 interface ParsedVisionResponse {
-  caseType: string;
-  parties: CaseSummary['parties'];
-  keyFacts: string[];
+  caseType:    string;
+  parties:     CaseSummary['parties'];
+  keyFacts:    string[];
   reliefSought: string;
-  questions: string[];
+  questions:   string[];
 }
 
 /**
- * Parse and validate the Claude Vision JSON response.
+ * Parse and validate JSON response from any vision provider.
  * Property 5: Case summary always contains all required fields.
  * Property 6: Vision_Reader always returns 4 to 5 questions.
  */
 function parseCaseSummary(rawResponse: string): ParsedVisionResponse {
-  // Extract JSON from response (Claude sometimes wraps in markdown)
   const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    throw new Error('No JSON found in Vision response');
-  }
+  if (!jsonMatch) throw new Error('No JSON found in Vision response');
 
   let parsed: Partial<ParsedVisionResponse>;
-  try {
-    parsed = JSON.parse(jsonMatch[0]);
-  } catch {
-    throw new Error('Invalid JSON in Vision response');
-  }
+  try { parsed = JSON.parse(jsonMatch[0]); }
+  catch { throw new Error('Invalid JSON in Vision response'); }
 
-  // Validate required fields
   if (!parsed.caseType || typeof parsed.caseType !== 'string' || !parsed.caseType.trim()) {
     throw new Error('Missing or empty caseType in Vision response');
   }
@@ -380,4 +458,3 @@ function parseCaseSummary(rawResponse: string): ParsedVisionResponse {
 
   return parsed as ParsedVisionResponse;
 }
-
