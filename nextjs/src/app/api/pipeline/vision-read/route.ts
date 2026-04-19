@@ -134,17 +134,46 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   try {
     const body = await request.json();
-    const { fileBase64, mimeType } = body as {
-      fileBase64: string;
+    const { storagePath, fileBase64: legacyBase64, mimeType } = body as {
+      storagePath?: string;
+      fileBase64?: string;
       mimeType: string;
       pageCount: number;
     };
 
-    if (!fileBase64 || !mimeType) {
+    if (!mimeType || (!storagePath && !legacyBase64)) {
       return NextResponse.json(
         { error: 'à²«à³ˆà²²à³ à²¡à³‡à²Ÿà²¾ à²…à²—à²¤à³à²¯ / File data required' },
         { status: 400 }
       );
+    }
+
+    // v10: resolve file bytes — prefer Supabase Storage path over legacy base64
+    let fileBase64: string;
+    if (storagePath) {
+      if (!serviceRoleKey) {
+        console.error('[vision-read] SUPABASE_SERVICE_ROLE_KEY not set — cannot download from storage');
+        return NextResponse.json(
+          { error: 'Server storage not configured / ಸರ್ವರ್ ಸಂಗ್ರಹ ಕಾನ್ಫಿಗರ್ ಇಲ್ಲ' },
+          { status: 500 }
+        );
+      }
+      console.log('[vision-read] downloading from storage:', storagePath);
+      const { data: blob, error: dlError } = await adminClient.storage
+        .from('files')
+        .download(storagePath);
+      if (dlError || !blob) {
+        console.error('[vision-read] Supabase download failed:', dlError);
+        return NextResponse.json(
+          { error: 'File not found in storage / ಫೈಲ್ ಸಂಗ್ರಹದಲ್ಲಿ ಇಲ್ಲ' },
+          { status: 404 }
+        );
+      }
+      const buf = Buffer.from(await blob.arrayBuffer());
+      fileBase64 = buf.toString('base64');
+      console.log('[vision-read] downloaded bytes:', buf.length);
+    } else {
+      fileBase64 = legacyBase64!;
     }
 
     const apiKey = process.env.ANTHROPIC_API_KEY;

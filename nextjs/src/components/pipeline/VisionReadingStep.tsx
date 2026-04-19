@@ -29,14 +29,14 @@ export function VisionReadingStep({ dispatch, locale }: VisionReadingStepProps) 
     setError('');
     setCaseSummary(null);
 
-    const fileBase64 = sessionStorage.getItem('pipeline_file_base64');
+    // v10: read storage path (new) or fall back to legacy base64 (never set by new client)
+    const storagePath = sessionStorage.getItem('pipeline_storage_path');
+    const legacyBase64 = sessionStorage.getItem('pipeline_file_base64');
     const mimeType = sessionStorage.getItem('pipeline_file_mime');
     const pageCount = parseInt(sessionStorage.getItem('pipeline_file_page_count') ?? '1', 10);
 
-    console.log('[VisionReadingStep] readCaseFile — fileBase64 length:', fileBase64?.length ?? 0, 'mime:', mimeType);
-
-    if (!fileBase64 || !mimeType) {
-      console.error('[VisionReadingStep] sessionStorage missing file data!');
+    if ((!storagePath && !legacyBase64) || !mimeType) {
+      console.error('[VisionReadingStep] sessionStorage missing storagePath/base64 or mimeType');
       setError(kn ? 'ಫೈಲ್ ಡೇಟಾ ಕಾಣೆಯಾಗಿದೆ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಅಪ್\u200Cಲೋಡ್ ಮಾಡಿ / File data missing. Please re-upload.' : 'File data missing. Please re-upload.');
       return;
     }
@@ -49,28 +49,33 @@ export function VisionReadingStep({ dispatch, locale }: VisionReadingStepProps) 
         return;
       }
 
-      console.log('[VisionReadingStep] calling /api/pipeline/vision-read, pageCount:', pageCount);
+      const payload: Record<string, unknown> = { mimeType, pageCount };
+      if (storagePath) payload.storagePath = storagePath;
+      else if (legacyBase64) payload.fileBase64 = legacyBase64;
+
+      console.log('[VisionReadingStep] calling /api/pipeline/vision-read', {
+        hasStoragePath: Boolean(storagePath),
+        mimeType,
+        pageCount,
+      });
       const response = await fetch('/api/pipeline/vision-read', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ fileBase64, mimeType, pageCount }),
+        body: JSON.stringify(payload),
       });
 
-      console.log('[VisionReadingStep] vision-read response status:', response.status);
-
       if (!response.ok) {
-        const data = await response.json();
-        console.error('[VisionReadingStep] vision-read error response:', response.status, data);
+        const data = await response.json().catch(() => ({}));
+        console.error('[VisionReadingStep] vision-read error:', response.status, data);
         throw new Error(data.error || `Vision read failed (${response.status})`);
       }
 
       const data = await response.json();
-      console.log('[VisionReadingStep] vision-read success, caseType:', data.caseType);
       setCaseSummary(data.caseSummary);
       setQuestions(data.questions);
       setCaseType(data.caseType);
 
-      // Clear file from sessionStorage — no longer needed
+      // Legacy key cleanup — safe no-op if absent
       sessionStorage.removeItem('pipeline_file_base64');
     } catch (err) {
       console.error('[VisionReadingStep] error:', err);

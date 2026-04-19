@@ -70,15 +70,19 @@ export function FileUploadStep({ dispatch, locale }: FileUploadStepProps) {
   }
 
   // ── Shared file processing logic ───────────────────────────────────────────
+  // v10 architectural fix: upload via FormData → server uploads to Supabase Storage.
+  // Client stores only the storage path (~100 bytes) in sessionStorage, not base64.
+  // Prior implementation stored ~33 MB UTF-16 base64 → QuotaExceededError on CamScanner PDFs.
   async function processFile(file: File) {
     setError('');
     setUploadSuccess(false);
 
     // Client-side checks (fast, no server needed)
     if (file.size > MAX_FILE_SIZE_BYTES) {
+      const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
       setError(kn
-        ? `ಫೈಲ್ ${MAX_FILE_SIZE_MB}MB ಗಿಂತ ದೊಡ್ಡದಾಗಿದೆ / File exceeds ${MAX_FILE_SIZE_MB}MB limit`
-        : `File exceeds ${MAX_FILE_SIZE_MB}MB limit`
+        ? `ಫೈಲ್ ${sizeMB}MB ಗರಿಷ್ಠ ${MAX_FILE_SIZE_MB}MB ಮೀರಿದೆ. ಕಡಿಮೆ ರೆಸೊಲ್ಯೂಶನ್‌ನಲ್ಲಿ ಮರುಸ್ಕ್ಯಾನ್ ಮಾಡಿ. / File ${sizeMB}MB exceeds ${MAX_FILE_SIZE_MB}MB. Re-scan at lower resolution.`
+        : `File ${sizeMB}MB exceeds ${MAX_FILE_SIZE_MB}MB limit. Re-scan at lower resolution.`
       );
       return;
     }
@@ -94,51 +98,79 @@ export function FileUploadStep({ dispatch, locale }: FileUploadStepProps) {
     setSelectedFile(file);
     setLoading(true);
 
-    let base64 = '';
+    // Clear any stale pipeline data (legacy + new keys)
+    try {
+      sessionStorage.removeItem('pipeline_file_base64');      // legacy, do not use
+      sessionStorage.removeItem('pipeline_storage_path');
+      sessionStorage.removeItem('pipeline_file_name');
+      sessionStorage.removeItem('pipeline_file_mime');
+      sessionStorage.removeItem('pipeline_file_page_count');
+      sessionStorage.removeItem('pipeline_case_type_hint');
+    } catch { /* ignore */ }
 
     try {
-      base64 = await fileToBase64(file);
-
-      // ── Try server validate, but bypass on server errors ──────────────────
-      let pageCount = 1;
-      try {
-        const headers = await getAuthHeaders();
-        if (headers) {
-          const response = await fetch('/api/pipeline/validate', {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({ fileBase64: base64, mimeType: file.type, fileName: file.name }),
-          });
-
-          // Only treat as a file problem if it's a 422 (unprocessable) response
-          if (response.status === 422) {
-            const result = await response.json();
-            if (!result.valid) {
-              setError(result.error || (kn ? 'ಫೈಲ್ ಪರಿಶೀಲನೆ ವಿಫಲವಾಯಿತು / Validation failed' : 'Validation failed'));
-              setLoading(false);
-              return;
-            }
-          } else if (response.ok) {
-            const result = await response.json();
-            if (!result.valid) {
-              setError(result.error || (kn ? 'ಫೈಲ್ ಪರಿಶೀಲನೆ ವಿಫಲವಾಯಿತು / Validation failed' : 'Validation failed'));
-              setLoading(false);
-              return;
-            }
-            pageCount = result.pageCount ?? 1;
-          }
-          // else: 401/500/timeout → bypass validate, proceed with reading
-        }
-      } catch {
-        // Network error on validate call — bypass and proceed
+      const headers = await getAuthHeaders();
+      if (!headers) {
+        setError(kn
+          ? 'ಸೆಷನ್ ಮುಕ್ತಾಯ. ಮರುಲಾಗಿನ್ ಮಾಡಿ / Session expired. Please login.'
+          : 'Session expired. Please login.'
+        );
+        setLoading(false);
+        return;
       }
 
-      // ── Store file data and advance ───────────────────────────────────────
-      sessionStorage.setItem('pipeline_file_base64', base64);
-      sessionStorage.setItem('pipeline_file_mime', file.type);
-      sessionStorage.setItem('pipeline_file_page_count', String(pageCount));
+      // FormData upload — no base64, no sessionStorage for file body
+      const formData = new FormData();
+      formData.append('file', file);
       if (selectedCaseType) {
-        sessionStorage.setItem('pipeline_case_type_hint', selectedCaseType);
+        formData.append('caseTypeHint', selectedCaseType);
+      }
+
+      // Only send Authorization — let browser set multipart Content-Type with boundary
+      const uploadHeaders: Record<string, string> = {};
+      if (headers.Authorization) uploadHeaders.Authorization = headers.Authorization;
+
+      const response = await fetch('/api/pipeline/validate', {
+        method: 'POST',
+        headers: uploadHeaders,
+        body: formData,
+      });
+
+      if (!response.ok) {
+        let errMsg = `Server returned ${response.status}`;
+        try {
+          const errData = await response.json();
+          if (errData?.error) errMsg = errData.error;
+        } catch { /* response body not JSON */ }
+        setError(errMsg);
+        setLoading(false);
+        return;
+      }
+
+      const result = await response.json();
+      if (!result.valid || !result.storagePath) {
+        setError(result.error || (kn ? 'ಫೈಲ್ ಪರಿಶೀಲನೆ ವಿಫಲವಾಯಿತು / Validation failed' : 'Validation failed'));
+        setLoading(false);
+        return;
+      }
+
+      // Store ONLY the path + metadata — tiny payload, safe for sessionStorage
+      try {
+        sessionStorage.setItem('pipeline_storage_path', result.storagePath);
+        sessionStorage.setItem('pipeline_file_name', file.name);
+        sessionStorage.setItem('pipeline_file_mime', file.type);
+        sessionStorage.setItem('pipeline_file_page_count', String(result.pageCount ?? 1));
+        if (selectedCaseType) {
+          sessionStorage.setItem('pipeline_case_type_hint', selectedCaseType);
+        }
+      } catch (storageErr) {
+        console.error('[FileUploadStep] sessionStorage failed for path:', storageErr);
+        setError(kn
+          ? 'ಬ್ರೌಸರ್ ಸ್ಟೋರೇಜ್ ಲಭ್ಯವಿಲ್ಲ. ಗೌಪ್ಯತೆ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಪರಿಶೀಲಿಸಿ. / Browser storage unavailable. Check privacy settings.'
+          : 'Browser storage unavailable. Check privacy settings.'
+        );
+        setLoading(false);
+        return;
       }
 
       // Brief success flash before navigating
@@ -148,10 +180,13 @@ export function FileUploadStep({ dispatch, locale }: FileUploadStepProps) {
       dispatch({ type: 'SET_STEP', step: 'reading' });
 
     } catch (err) {
-      console.error('[FileUploadStep] processFile error:', err);
+      const errName = err instanceof Error ? err.name : 'UnknownError';
+      const errMsg = err instanceof Error ? err.message : String(err);
+      const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+      console.error('[FileUploadStep] Upload failed:', { errName, errMsg, sizeMB, fileName: file.name });
       setError(kn
-        ? 'ಫೈಲ್ ಓದಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ಮತ್ತೊಮ್ಮೆ ಪ್ರಯತ್ನಿಸಿ / Could not read file. Please retry.'
-        : 'Could not read file. Please retry.'
+        ? `ಅಪ್‌ಲೋಡ್ ವಿಫಲ (${errName}): ${errMsg}. ಫೈಲ್: ${sizeMB}MB`
+        : `Upload failed (${errName}): ${errMsg}. File: ${sizeMB}MB`
       );
       setLoading(false);
     }
@@ -362,15 +397,3 @@ export function FileUploadStep({ dispatch, locale }: FileUploadStepProps) {
   );
 }
 
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      const base64 = result.split(',')[1];
-      resolve(base64);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
