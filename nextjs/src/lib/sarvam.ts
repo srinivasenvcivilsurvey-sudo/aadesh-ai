@@ -391,10 +391,14 @@ export async function callSarvamDocIntelChunk(
   pdfBase64: string,
   apiKey: string
 ): Promise<string> {
+  // Endpoints verified against docs.sarvam.ai 2026-04-19
+  // Base: https://api.sarvam.ai (no /v1 prefix for document-intelligence)
+  // Flow: POST /document-intelligence/create-job → POST /{id}/upload (multipart)
+  //       → POST /{id}/start → GET /{id}/status → GET /{id}/download
   const authHeaders = { 'api-subscription-key': apiKey };
 
   // 1. Create job
-  const createRes = await fetch(`${SARVAM_DOC_INTEL_BASE}/v1/document-intelligence/create`, {
+  const createRes = await fetch(`${SARVAM_DOC_INTEL_BASE}/document-intelligence/create-job`, {
     method: 'POST',
     headers: { ...authHeaders, 'Content-Type': 'application/json' },
     body: JSON.stringify({ language: 'kn-IN', output_format: 'md' }),
@@ -408,12 +412,14 @@ export async function callSarvamDocIntelChunk(
   if (!jobId) throw new Error(`[Sarvam DocIntel] no job ID: ${JSON.stringify(jobData).slice(0, 200)}`);
   console.log(`[Sarvam DocIntel] job created: ${jobId}`);
 
-  // 2. Upload PDF bytes
+  // 2. Upload PDF as multipart form-data (field name: file)
   const pdfBytes = Buffer.from(pdfBase64, 'base64');
-  const uploadRes = await fetch(`${SARVAM_DOC_INTEL_BASE}/v1/document-intelligence/${jobId}/upload`, {
-    method: 'PUT',
-    headers: { ...authHeaders, 'Content-Type': 'application/pdf' },
-    body: pdfBytes,
+  const form = new FormData();
+  form.append('file', new Blob([new Uint8Array(pdfBytes)], { type: 'application/pdf' }), 'document.pdf');
+  const uploadRes = await fetch(`${SARVAM_DOC_INTEL_BASE}/document-intelligence/${jobId}/upload`, {
+    method: 'POST',
+    headers: authHeaders, // fetch sets Content-Type with boundary automatically
+    body: form,
   });
   if (!uploadRes.ok) {
     const errText = await uploadRes.text().catch(() => '');
@@ -422,7 +428,7 @@ export async function callSarvamDocIntelChunk(
   console.log(`[Sarvam DocIntel] uploaded ${pdfBytes.length} bytes`);
 
   // 3. Start job
-  const startRes = await fetch(`${SARVAM_DOC_INTEL_BASE}/v1/document-intelligence/${jobId}/start`, {
+  const startRes = await fetch(`${SARVAM_DOC_INTEL_BASE}/document-intelligence/${jobId}/start`, {
     method: 'POST',
     headers: authHeaders,
   });
@@ -432,12 +438,12 @@ export async function callSarvamDocIntelChunk(
   }
   console.log('[Sarvam DocIntel] job started');
 
-  // 4. Poll until complete or timeout
+  // 4. Poll /status until complete or timeout
   const pollDeadline = Date.now() + SARVAM_DOC_INTEL_MAX_POLL_MS;
   let lastState = 'unknown';
   while (Date.now() < pollDeadline) {
     await new Promise(r => setTimeout(r, SARVAM_DOC_INTEL_POLL_MS));
-    const pollRes = await fetch(`${SARVAM_DOC_INTEL_BASE}/v1/document-intelligence/${jobId}`, {
+    const pollRes = await fetch(`${SARVAM_DOC_INTEL_BASE}/document-intelligence/${jobId}/status`, {
       headers: authHeaders,
     });
     if (!pollRes.ok) throw new Error(`[Sarvam DocIntel] poll failed (${pollRes.status})`);
@@ -453,7 +459,7 @@ export async function callSarvamDocIntelChunk(
   }
 
   // 5. Download output
-  const dlRes = await fetch(`${SARVAM_DOC_INTEL_BASE}/v1/document-intelligence/${jobId}/download`, {
+  const dlRes = await fetch(`${SARVAM_DOC_INTEL_BASE}/document-intelligence/${jobId}/download`, {
     headers: authHeaders,
   });
   if (!dlRes.ok) throw new Error(`[Sarvam DocIntel] download failed (${dlRes.status})`);
