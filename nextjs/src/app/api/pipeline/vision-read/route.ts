@@ -78,7 +78,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // ── Auth ──────────────────────────────────────────────────────────────────────
   const authHeader = request.headers.get('Authorization');
   if (!authHeader?.startsWith('Bearer ')) {
-    return NextResponse.json({ error: 'à²…à²¨à²§à²¿à²•à³ƒà²¤ / Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'ಅನಧಿಕೃತ / Unauthorized' }, { status: 401 });
   }
   const token = authHeader.split(' ')[1];
   const supabase = createClient(
@@ -87,7 +87,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   );
   const { data: { user }, error: authError } = await supabase.auth.getUser(token);
   if (authError || !user) {
-    return NextResponse.json({ error: 'à²…à²¨à²§à²¿à²•à³ƒà²¤ / Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'ಅನಧಿಕೃತ / Unauthorized' }, { status: 401 });
   }
 
   // â”€â”€ Credit check (Fix 12) â€” don't deduct, just gate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -143,7 +143,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     if (!mimeType || (!storagePath && !legacyBase64)) {
       return NextResponse.json(
-        { error: 'à²«à³ˆà²²à³ à²¡à³‡à²Ÿà²¾ à²…à²—à²¤à³à²¯ / File data required' },
+        { error: 'ಫೈಲ್ ಡೇಟಾ ಅಗತ್ಯ / File data required' },
         { status: 400 }
       );
     }
@@ -180,7 +180,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (!apiKey) {
       console.error('ANTHROPIC_API_KEY not configured');
       return NextResponse.json(
-        { error: 'à²¸à²°à³à²µà²°à³ à²•à²¾à²¨à³à²«à²¿à²—à²°à³‡à²¶à²¨à³ à²¦à³‹à²· / Server configuration error' },
+        { error: 'ಸರ್ವರ್ ಕಾನ್ಫಿಗರೇಶನ್ ದೋಷ / Server configuration error' },
         { status: 500 }
       );
     }
@@ -217,7 +217,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         const response = await client.messages.create(
           {
             model: VISION_MODEL,
-            max_tokens: 2048,
+            max_tokens: 4096,
             system: VISION_SYSTEM_PROMPT,
             messages: [
               {
@@ -282,8 +282,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   } catch (err) {
     console.error('Vision read error:', err);
     const message = err instanceof Error && err.name === 'AbortError'
-      ? 'AI à²¸à³‡à²µà³† à²¨à²¿à²§à²¾à²¨à²µà²¾à²—à²¿à²¦à³†. à²¦à²¯à²µà²¿à²Ÿà³à²Ÿà³ à²®à²¤à³à²¤à³Šà²®à³à²®à³† à²ªà³à²°à²¯à²¤à³à²¨à²¿à²¸à²¿ / AI service timed out. Please retry.'
-      : 'à²«à³ˆà²²à³ à²“à²¦à²²à³ à²¸à²¾à²§à³à²¯à²µà²¾à²—à²²à²¿à²²à³à²². à²¦à²¯à²µà²¿à²Ÿà³à²Ÿà³ à²®à²¤à³à²¤à³Šà²®à³à²®à³† à²ªà³à²°à²¯à²¤à³à²¨à²¿à²¸à²¿ / Could not read file. Please retry.';
+      ? 'AI ಸೇವೆ ನಿಧಾನವಾಗಿದೆ. ದಯವಿಟ್ಟು ಮತ್ತೊಮ್ಮೆ ಪ್ರಯತ್ನಿಸಿ / AI service timed out. Please retry.'
+      : 'ಫೈಲ್ ಓದಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೊಮ್ಮೆ ಪ್ರಯತ್ನಿಸಿ / Could not read file. Please retry.';
     return NextResponse.json({ error: message }, { status: 503 });
   }
 }
