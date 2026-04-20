@@ -18,10 +18,11 @@ import { checkDailyLimit, formatResetTime } from '@/lib/pipeline/rateLimiter';
 import { logError, logException } from '@/lib/pipeline/errorLogger';
 import { validateEnv } from '@/lib/validateEnv';
 import { checkIpLimit } from '@/lib/ipRateLimiter';
+import { buildManifest } from '@/lib/pipeline/manifest';
 import type { CaseSummary, OfficerAnswers } from '@/lib/pipeline/types';
 
 const GENERATION_MODEL = 'claude-sonnet-4-6';
-const PROMPT_VERSION = 'V3.2.6'; // FIX 2026-04-12: Updated; personal_prompt overrides when available
+const PROMPT_VERSION = 'V3.2.7'; // V3.2.7 2026-04-19: party role lock + analysis 4 sub-sections + header dedupe (post-Machohalli P0 fix)
 const MAX_TOKENS = 8192;
 const GENERATION_TIMEOUT_MS = 120_000;
 const SIMPLE_CASE_TYPES = ['withdrawal', 'suo_motu'];
@@ -86,11 +87,24 @@ export async function POST(request: NextRequest): Promise<Response> {
         validateEnv();
 
         const body = await request.json();
-        const { caseType, caseSummary, officerAnswers, sessionOrderCount = 1 } = body as {
+        const {
+          caseType,
+          caseSummary,
+          officerAnswers,
+          sessionOrderCount = 1,
+          receiptId = null,
+          attestationHash = null,
+          reasoningHash = null,
+          inputFileSha256 = null,
+        } = body as {
           caseType: string;
           caseSummary: CaseSummary;
           officerAnswers: OfficerAnswers;
           sessionOrderCount?: number;
+          receiptId?: string | null;
+          attestationHash?: string | null;
+          reasoningHash?: string | null;
+          inputFileSha256?: string | null;
         };
         const selectedModel = officerAnswers.selectedModel ?? 'sarvam';
 
@@ -488,6 +502,42 @@ export async function POST(request: NextRequest): Promise<Response> {
           outputTokens: outputTokens || null,
         });
 
+        // ── L4 Legal Shield: build tamper-evident manifest ────────────────────
+        let manifestHash: string | null = null;
+        let platformSignature: string | null = null;
+        try {
+          const storagePath = sessionOrderCount > 0 ? (receiptId ?? 'unknown') : 'unknown';
+          const manifestResult = buildManifest({
+            fileName: storagePath,
+            fileSha256: inputFileSha256 ?? '',
+            pageCount: 1,
+            extractedFields: caseSummary as unknown as Record<string, unknown>,
+            attestedBy: officerAnswers.officerName,
+            attestedAt: new Date().toISOString(),
+            attestationHash: attestationHash ?? '',
+            reasoningHash: reasoningHash ?? '',
+            keyIssue: '',
+            documentsRelied: [],
+            decisionReasoning: '',
+            orderText: generatedText,
+            model: modelUsed,
+            promptVersion: PROMPT_VERSION,
+            tokensIn: inputTokens ?? 0,
+            tokensOut: outputTokens ?? 0,
+          });
+          manifestHash = manifestResult.manifest_hash;
+          platformSignature = manifestResult.platform_signature;
+        } catch (manifestErr) {
+          // Non-fatal — manifest failure must never block order delivery
+          logError({
+            message: `Manifest build failed: ${manifestErr instanceof Error ? manifestErr.message : String(manifestErr)}`,
+            route: '/api/pipeline/generate',
+            userId,
+            severity: 'WARNING',
+            metadata: {},
+          });
+        }
+
         // FIX M7: persist order to DB so it appears in my-orders and is never lost
         await adminClient.from('orders').insert({
           user_id: userId,
@@ -496,6 +546,12 @@ export async function POST(request: NextRequest): Promise<Response> {
           score: auditResult.score,
           model_used: modelUsed,
           version_number: 1,
+          // Legal Shield L1–L4 hashes
+          manifest_hash: manifestHash,
+          platform_signature: platformSignature,
+          attestation_hash: attestationHash,
+          reasoning_hash: reasoningHash,
+          input_pdf_sha256: inputFileSha256,
         }).then(({ error: orderError }) => {
           if (orderError) {
             // Non-fatal: log but don't fail — user already has the generated text

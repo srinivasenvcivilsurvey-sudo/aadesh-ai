@@ -168,6 +168,8 @@ function buildCaseInputBlock(
       ``,
     ] : []),
     ...(caseSummary.reliefSought ? [`ಕೋರಿದ ಪರಿಹಾರ: ${caseSummary.reliefSought}`] : []),
+    // V3.2.7 FIX 4 — optional extras extracted by Vision step (appear only when present)
+    ...(caseSummary.extras ? buildExtrasLines(caseSummary.extras) : []),
     ``,
     `═══ ಅಧಿಕಾರಿ ಉತ್ತರಗಳು (Officer Answers) ═══`,
     ``,
@@ -201,4 +203,17 @@ function formatDate(isoDate: string): string {
   } catch {
     return isoDate;
   }
+}
+
+// V3.2.7 FIX 4 — render optional extras (appellant age, hearing dates, mutation, sale consideration)
+// as Kannada-labelled lines. Only fields that are present produce output.
+function buildExtrasLines(extras: NonNullable<CaseSummary['extras']>): string[] {
+  const out: string[] = [];
+  if (extras.appellantAge)          out.push(`ಮೇಲ್ಮನವಿದಾರರ ವಯಸ್ಸು: ${extras.appellantAge}`);
+  if (extras.respondent3Age)        out.push(`3ನೇ ಎದುರುದಾರರ ವಯಸ್ಸು: ${extras.respondent3Age}`);
+  if (extras.hearingDates?.length)  out.push(`ವಿಚಾರಣಾ ದಿನಾಂಕಗಳು: ${extras.hearingDates.join(', ')}`);
+  if (extras.mutationNo)            out.push(`ಮ್ಯುಟೇಶನ್ ಸಂಖ್ಯೆ: ${extras.mutationNo}`);
+  if (extras.mutationDate)          out.push(`ಮ್ಯುಟೇಶನ್ ದಿನಾಂಕ: ${extras.mutationDate}`);
+  if (extras.saleDeedConsideration) out.push(`ಮಾರಾಟ ಪತ್ರದ ಪ್ರತಿಫಲ: ${extras.saleDeedConsideration}`);
+  return out;
 }

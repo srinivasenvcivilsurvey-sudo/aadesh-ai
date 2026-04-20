@@ -46,11 +46,19 @@ Return ONLY valid JSON in this exact format, no other text:
 {
   "caseType": "string (e.g. 'contested_appeal', 'withdrawal', 'suo_motu')",
   "parties": {
-    "petitioner": "string (appellant/petitioner name)",
-    "respondent": "string (respondent name)"
+    "petitioner": "string (appellant/petitioner name, exactly as written in ಮೇಲ್ಮನವಿದಾರರು field)",
+    "respondent": "string (primary respondent name, exactly as written in first ಎದುರುದಾರರು entry)"
   },
   "keyFacts": ["fact 1", "fact 2", "fact 3", "..."],
   "reliefSought": "string (what the petitioner is asking for)",
+  "extras": {
+    "appellantAge": "string or null (age of the appellant if mentioned, e.g. '62 years')",
+    "respondent3Age": "string or null (age of 3rd respondent if mentioned)",
+    "hearingDates": ["YYYY-MM-DD", "..."],
+    "mutationNo": "string or null (mutation / ಕ್ರಮ number if referenced)",
+    "mutationDate": "string or null (mutation date if mentioned, ISO preferred)",
+    "saleDeedConsideration": "string or null (sale deed consideration amount with unit, e.g. '₹5,00,000')"
+  },
   "questions": [
     "Question 1 in Kannada or English",
     "Question 2",
@@ -59,8 +67,12 @@ Return ONLY valid JSON in this exact format, no other text:
     "Question 5 (optional case-specific question)"
   ]
 }
-The questions array must have 4 to 5 items. The last question should be specific to this case.
-keyFacts must include all survey numbers, case numbers, dates, and party names mentioned.`;
+Rules:
+- parties.petitioner MUST come from the ಮೇಲ್ಮನವಿದಾರರು / Appellant field. parties.respondent MUST come from the first ಎದುರುದಾರರು / Respondent entry. NEVER swap these roles.
+- questions array must have 4 to 5 items. The last question should be specific to this case.
+- keyFacts must include all survey numbers, case numbers, dates, and party names mentioned.
+- extras is OPTIONAL — omit fields or set them to null when the source document does not contain that information. Do NOT fabricate values.
+- hearingDates: include every explicit hearing/adjournment date you can find (empty array if none).`;
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -376,6 +388,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         parties:      parsed.parties,
         keyFacts:     parsed.keyFacts,
         reliefSought: parsed.reliefSought,
+        ...(parsed.extras ? { extras: parsed.extras } : {}),
       },
       questions: parsed.questions,
       caseType:  parsed.caseType,
@@ -424,6 +437,7 @@ interface ParsedVisionResponse {
   parties:     CaseSummary['parties'];
   keyFacts:    string[];
   reliefSought: string;
+  extras?:     CaseSummary['extras'];
   questions:   string[];
 }
 
@@ -456,5 +470,29 @@ function parseCaseSummary(rawResponse: string): ParsedVisionResponse {
     throw new Error(`questions array must have 4-5 items, got ${parsed.questions?.length ?? 0}`);
   }
 
-  return parsed as ParsedVisionResponse;
+  // V3.2.7 FIX 4 — sanitize optional extras (all fields optional; nulls/missing drop out)
+  const rawExtras = (parsed as { extras?: Record<string, unknown> }).extras;
+  let extras: CaseSummary['extras'] | undefined;
+  if (rawExtras && typeof rawExtras === 'object') {
+    const cleanStr = (v: unknown): string | undefined =>
+      typeof v === 'string' && v.trim() && v.trim().toLowerCase() !== 'null' ? v.trim() : undefined;
+    const cleanDates = (v: unknown): string[] | undefined => {
+      if (!Array.isArray(v)) return undefined;
+      const out = v.filter((d): d is string => typeof d === 'string' && d.trim().length > 0).map(d => d.trim());
+      return out.length > 0 ? out : undefined;
+    };
+    const candidate: CaseSummary['extras'] = {
+      appellantAge:          cleanStr(rawExtras.appellantAge),
+      respondent3Age:        cleanStr(rawExtras.respondent3Age),
+      hearingDates:          cleanDates(rawExtras.hearingDates),
+      mutationNo:            cleanStr(rawExtras.mutationNo),
+      mutationDate:          cleanStr(rawExtras.mutationDate),
+      saleDeedConsideration: cleanStr(rawExtras.saleDeedConsideration),
+    };
+    // Drop keys with undefined values so JSON stays lean
+    const entries = Object.entries(candidate).filter(([, v]) => v !== undefined);
+    extras = entries.length > 0 ? Object.fromEntries(entries) as CaseSummary['extras'] : undefined;
+  }
+
+  return { ...(parsed as ParsedVisionResponse), extras };
 }

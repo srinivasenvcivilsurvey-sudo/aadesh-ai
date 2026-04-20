@@ -70,6 +70,11 @@ export function GeneratingStep({ dispatch, locale, state, userId, onComplete }: 
           officerAnswers: state.officerAnswers,
           userId,
           sessionOrderCount: state.sessionOrderCount + 1,
+          // Legal Shield hashes (L1/L3/L3.5) — forwarded to generate route for manifest
+          receiptId: state.receiptId,
+          attestationHash: state.attestationHash,
+          reasoningHash: state.reasoningHash,
+          inputFileSha256: state.inputFileSha256,
         }),
         signal: abortRef.current.signal,
       });

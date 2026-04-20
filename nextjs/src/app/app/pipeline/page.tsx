@@ -7,6 +7,8 @@ import { pipelineReducer, initialPipelineState } from '@/lib/pipeline/pipelineRe
 import { FileUploadStep } from '@/components/pipeline/FileUploadStep';
 import { VisionReadingStep } from '@/components/pipeline/VisionReadingStep';
 import { QuestionsStep } from '@/components/pipeline/QuestionsStep';
+import { EntityLockModal } from '@/components/pipeline/EntityLockModal';
+import { OfficerReasoningStep } from '@/components/pipeline/OfficerReasoningStep';
 import { GeneratingStep } from '@/components/pipeline/GeneratingStep';
 import { PreviewEditorStep } from '@/components/pipeline/PreviewEditorStep';
 import { DownloadStep } from '@/components/pipeline/DownloadStep';
@@ -18,7 +20,7 @@ import type { PipelineStep } from '@/lib/pipeline/types';
 // Simple case types that skip Vision reading
 const SIMPLE_CASE_TYPES = new Set(['withdrawal', 'suo_motu']);
 
-const STEP_ORDER: PipelineStep[] = ['upload', 'reading', 'questions', 'generating', 'preview', 'downloading'];
+const STEP_ORDER: PipelineStep[] = ['upload', 'reading', 'questions', 'entity_lock', 'reasoning', 'generating', 'preview', 'downloading'];
 
 export default function PipelinePage() {
   const { user, loading } = useGlobal();
@@ -197,6 +199,24 @@ export default function PipelinePage() {
           aiQuestions={state.aiQuestions}
           officerName={officerName}
           isSimplePath={isSimplePath}
+        />
+      )}
+
+      {state.step === 'entity_lock' && (
+        <EntityLockModal
+          dispatch={dispatch}
+          locale={locale}
+          state={state}
+          userId={user.id}
+        />
+      )}
+
+      {state.step === 'reasoning' && (
+        <OfficerReasoningStep
+          dispatch={dispatch}
+          locale={locale}
+          state={state}
+          userId={user.id}
         />
       )}
 

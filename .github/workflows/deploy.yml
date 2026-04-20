@@ -55,6 +55,7 @@ jobs:
             cd /root/aadesh-ai-src/nextjs
 
             echo "Pull latest code"
+            git stash --include-untracked || true
             git pull origin main
 
             echo "Install dependencies"

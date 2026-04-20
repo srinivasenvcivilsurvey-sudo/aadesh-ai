@@ -63,11 +63,15 @@ async function runFullAudit(
     Promise.resolve(checkWordCount(orderText, inputText)),
   ]);
 
+  // V3.2.7 PATCH F — token-loop detector (20-word sliding window; fail if any sequence appears >2x)
+  const repeatResult = detectTokenLoop(orderText);
+
   const checks = {
     sectionCompleteness: sectionResult.passed,
     kannadaPurity: purityResult.passed,
     factPreservation: factResult.passed,
     wordCount: wordResult.passed,
+    noRepetition: repeatResult.passed,
   };
 
   const failures: string[] = [];
@@ -75,6 +79,7 @@ async function runFullAudit(
   if (!checks.kannadaPurity) failures.push(purityResult.details);
   if (!checks.factPreservation) failures.push(factResult.details);
   if (!checks.wordCount) failures.push(wordResult.details);
+  if (!checks.noRepetition) failures.push(repeatResult.details);
 
   const score = Object.values(checks).filter(Boolean).length;
 
@@ -83,6 +88,54 @@ async function runFullAudit(
     score,
     failures,
   };
+}
+
+/**
+ * V3.2.7 PATCH F — token-loop / repetition detector.
+ * Sarvam 105B with reasoning_effort=low has been observed repeating the same
+ * sentence 15+ times in the Analysis section (Machohalli_163 first real order).
+ * This detector slides a 20-word window and fails if any window appears >2 times.
+ *
+ * Exported for direct use by callers that want to run the check without the
+ * full guardrail suite.
+ */
+export function detectTokenLoop(
+  orderText: string,
+  opts: { windowSize?: number; maxOccurrences?: number } = {}
+): { passed: boolean; details: string } {
+  const windowSize = opts.windowSize ?? 20;
+  const maxOccurrences = opts.maxOccurrences ?? 2;
+
+  // Tokenise on whitespace (Kannada preserves word boundaries via spaces).
+  const tokens = orderText.split(/\s+/).filter(t => t.length > 0);
+  if (tokens.length < windowSize * 2) {
+    return { passed: true, details: 'ok (too short for repeat check)' };
+  }
+
+  const counts = new Map<string, number>();
+  for (let i = 0; i <= tokens.length - windowSize; i++) {
+    const window = tokens.slice(i, i + windowSize).join(' ');
+    counts.set(window, (counts.get(window) ?? 0) + 1);
+  }
+
+  let worstPhrase = '';
+  let worstCount = 0;
+  for (const [phrase, count] of counts.entries()) {
+    if (count > worstCount) {
+      worstCount = count;
+      worstPhrase = phrase;
+    }
+  }
+
+  if (worstCount > maxOccurrences) {
+    const preview = worstPhrase.slice(0, 60) + (worstPhrase.length > 60 ? '…' : '');
+    return {
+      passed: false,
+      details: `ಪುನರಾವರ್ತನೆ ದೋಷ: ${windowSize}-ಪದ ಅನುಕ್ರಮ "${preview}" ${worstCount} ಬಾರಿ ಕಾಣಿಸಿಕೊಂಡಿದೆ (ಗರಿಷ್ಠ ${maxOccurrences}). Token-loop detected — regenerate.`,
+    };
+  }
+
+  return { passed: true, details: 'ok' };
 }
 
 // ── Simplified path: word count only ─────────────────────────────────────────

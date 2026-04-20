@@ -22,6 +22,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { PDFDocument } from 'pdf-lib';
 import mammoth from 'mammoth';
+import { createHash, randomUUID } from 'crypto';
 import type { ValidateResponse, AllowedFileType } from '@/lib/pipeline/types';
 
 export const runtime = 'nodejs';
@@ -53,6 +54,9 @@ const BILINGUAL_ERRORS = {
 interface ValidateResponseWithPath extends ValidateResponse {
   storagePath?: string;
   sizeBytes?: number;
+  // L1 Legal Shield — returned only on successful multipart upload
+  receiptId?: string;
+  sha256?: string;
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse<ValidateResponseWithPath>> {
@@ -224,11 +228,45 @@ async function runValidation(request: NextRequest, userId: string): Promise<Vali
 
   console.log('[validate] uploaded to storage:', storagePath);
 
+  // ── L1 Legal Shield: SHA-256 + audit_log receipt ──────────────────────────
+  const sha256 = createHash('sha256').update(fileBuffer).digest('hex');
+  const receiptId = randomUUID();
+  const uploadTimestamp = new Date().toISOString();
+
+  const eventPayload = {
+    file_name: safeName,
+    file_size_bytes: fileBuffer.length,
+    page_count: pageCount,
+    mime_type: mimeType,
+    storage_path: storagePath,
+    upload_timestamp: uploadTimestamp,
+    input_pdf_sha256: sha256,
+  };
+  const eventHash = createHash('sha256')
+    .update(JSON.stringify(eventPayload, Object.keys(eventPayload).sort()))
+    .digest('hex');
+
+  try {
+    await adminClient.from('audit_log').insert({
+      id: receiptId,
+      user_id: userId,
+      receipt_id: receiptId,
+      event_type: 'upload',
+      event_payload: eventPayload,
+      event_hash: eventHash,
+    });
+  } catch (auditErr) {
+    // Non-blocking: log but don't fail the upload
+    console.warn('[validate] audit_log insert failed (non-fatal):', auditErr);
+  }
+
   return {
     valid: true,
     pageCount,
     fileType,
     storagePath,
     sizeBytes: fileBuffer.length,
+    receiptId,
+    sha256,
   };
 }

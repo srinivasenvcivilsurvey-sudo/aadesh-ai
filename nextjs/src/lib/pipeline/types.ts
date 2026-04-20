@@ -6,12 +6,14 @@
 // â”€â”€ Pipeline Step State Machine â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export type PipelineStep =
-  | 'upload'       // File upload + validation
-  | 'reading'      // Claude Vision reading the case file
-  | 'questions'    // Officer answering clarifying questions
-  | 'generating'   // AI generating the order (SSE stream)
-  | 'preview'      // Officer reviewing + editing
-  | 'downloading'; // DOCX export + download
+  | 'upload'        // File upload + validation
+  | 'reading'       // Claude Vision reading the case file
+  | 'questions'     // Officer answering clarifying questions
+  | 'entity_lock'   // L3 Legal Shield: un-skippable entity confirmation modal
+  | 'reasoning'     // L3.5 Legal Shield: officer reasoning capture
+  | 'generating'    // AI generating the order (SSE stream)
+  | 'preview'       // Officer reviewing + editing
+  | 'downloading';  // DOCX export + download
 
 // â”€â”€ Case Summary (returned by Vision Reader) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -23,6 +25,16 @@ export interface CaseSummary {
   };
   keyFacts: string[];
   reliefSought: string;
+  // V3.2.7 FIX 4 — optional extras extracted by Vision step when present in source PDF.
+  // All fields optional so existing call sites and tests remain unaffected.
+  extras?: {
+    appellantAge?: string;
+    respondent3Age?: string;
+    hearingDates?: string[];
+    mutationNo?: string;
+    mutationDate?: string;
+    saleDeedConsideration?: string;
+  };
 }
 
 // â”€â”€ Officer Answers (collected in QuestionsStep) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -48,7 +60,8 @@ export interface GuardrailResult {
   kannadaPurity: boolean | null;
   factPreservation: boolean | null;
   wordCount: boolean | null;
-  score: number;              // 0â€“4, one point per passing check
+  noRepetition?: boolean | null; // V3.2.7 PATCH F — flags when any 20-word sequence repeats >2x (token-loop detector)
+  score: number;              // 0–5 when noRepetition runs, else 0–4 — one point per passing check
   failures: string[];
 }
 
@@ -116,6 +129,11 @@ export interface PipelineState {
   inputTokens: number | null;
   outputTokens: number | null;
   promptVersion: string;
+  // Legal Shield v1 (2026-04-20): L1/L3/L3.5 hashes carried through pipeline
+  receiptId: string | null;          // L1: upload audit_log receipt
+  attestationHash: string | null;    // L3: entity-lock attestation SHA-256
+  reasoningHash: string | null;      // L3.5: officer reasoning SHA-256
+  inputFileSha256: string | null;    // L1: SHA-256 of original input PDF
 }
 
 // â”€â”€ Pipeline Actions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -132,7 +150,11 @@ export type PipelineAction =
   | { type: 'SET_CREDITS'; credits: number }
   | { type: 'INCREMENT_RETRY' }
   | { type: 'RESET_RETRY' }
-  | { type: 'SET_ORDER_ID'; orderId: string };
+  | { type: 'SET_ORDER_ID'; orderId: string }
+  // Legal Shield v1 actions
+  | { type: 'SET_RECEIPT'; receiptId: string; inputFileSha256: string }
+  | { type: 'SET_ATTESTATION'; attestationHash: string }
+  | { type: 'SET_REASONING'; reasoningHash: string };
   // INCREMENT_SESSION_ORDER_COUNT removed — SET_GENERATED_TEXT already increments sessionOrderCount
 
 // â”€â”€ Validate API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

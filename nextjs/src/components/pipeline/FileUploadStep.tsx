@@ -173,6 +173,11 @@ export function FileUploadStep({ dispatch, locale }: FileUploadStepProps) {
         return;
       }
 
+      // L1 Legal Shield: store receipt + SHA-256 in pipeline state
+      if (result.receiptId && result.sha256) {
+        dispatch({ type: 'SET_RECEIPT', receiptId: result.receiptId, inputFileSha256: result.sha256 });
+      }
+
       // Brief success flash before navigating
       setUploadSuccess(true);
       setLoading(false);

@@ -24,6 +24,11 @@ export const initialPipelineState: PipelineState = {
   inputTokens: null,
   outputTokens: null,
   promptVersion: 'V3.2.1',
+  // Legal Shield v1 (2026-04-20)
+  receiptId: null,
+  attestationHash: null,
+  reasoningHash: null,
+  inputFileSha256: null,
 };
 
 export function pipelineReducer(state: PipelineState, action: PipelineAction): PipelineState {
@@ -45,7 +50,7 @@ export function pipelineReducer(state: PipelineState, action: PipelineAction): P
       return {
         ...state,
         officerAnswers: action.answers,
-        step: 'generating',
+        step: 'entity_lock',  // L3 Legal Shield: route through entity confirmation before generating
         error: null,
       };
 
@@ -98,6 +103,16 @@ export function pipelineReducer(state: PipelineState, action: PipelineAction): P
 
     case 'SET_ORDER_ID':
       return { ...state, orderId: action.orderId };
+
+    // Legal Shield v1 actions
+    case 'SET_RECEIPT':
+      return { ...state, receiptId: action.receiptId, inputFileSha256: action.inputFileSha256 };
+
+    case 'SET_ATTESTATION':
+      return { ...state, attestationHash: action.attestationHash, step: 'reasoning', error: null };
+
+    case 'SET_REASONING':
+      return { ...state, reasoningHash: action.reasoningHash, step: 'generating', error: null };
 
     // FIX B11: INCREMENT_SESSION_ORDER_COUNT removed — SET_GENERATED_TEXT (above) already increments.
     // Dispatching both would double-count session orders.

@@ -1,7 +1,8 @@
 /**
  * Aadesh AI — System Prompt Loader
- * Primary: V3.2.6 loaded from disk (91/100 quality)
- * Fallback: V3.2.1 embedded string (safe fallback, never delete)
+ * Primary: V3.2.7 loaded from disk (party role lock + analysis sub-sections + header dedupe)
+ * Fallback 1: V3.2.6 on disk (91/100 quality baseline)
+ * Fallback 2: V3.2.1 embedded string (safe fallback, never delete)
  *
  * SaaS placeholders are replaced dynamically from user profile data.
  */
@@ -30,13 +31,13 @@ export const DEFAULT_OFFICER: OfficerProfile = {
   officerQualifications: 'ಕ.ಆ.ಸೇ',
 };
 
-// ── V3.2.6 disk loader (cached after first read) ────────────────────────────
-let _v326Content: string | null = null;
-let _v326Attempted = false;
+// ── V3.2.7 / V3.2.6 disk loader (cached after first read) ────────────────────
+let _promptContent: string | null = null;
+let _promptAttempted = false;
 
-function loadV326FromDisk(): string | null {
-  if (_v326Attempted) return _v326Content;
-  _v326Attempted = true;
+function loadPromptFromDisk(): string | null {
+  if (_promptAttempted) return _promptContent;
+  _promptAttempted = true;
 
   // Guard: never run in browser — fs does not exist client-side
   if (typeof window !== 'undefined') return null;
@@ -52,14 +53,17 @@ function loadV326FromDisk(): string | null {
     const fs = _require('fs');
     const path = _require('path');
 
+    // V3.2.7 preferred; V3.2.6 fallback if V3.2.7 not yet deployed.
     const promptPaths = [
-      // VPS layout: process.cwd() = /root/aadesh-ai-src/nextjs → go up one level
+      // V3.2.7 — VPS layout
+      path.join(process.cwd(), '..', 'KarnatakaAI', '11_DDLR_App', 'DDLR_SYSTEM_PROMPT_V3_2_7.md'),
+      '/root/aadesh-ai/KarnatakaAI/11_DDLR_App/DDLR_SYSTEM_PROMPT_V3_2_7.md',
+      '/root/aadesh-ai-src/KarnatakaAI/11_DDLR_App/DDLR_SYSTEM_PROMPT_V3_2_7.md',
+      path.join(process.cwd(), '..', '..', 'KarnatakaAI', '11_DDLR_App', 'DDLR_SYSTEM_PROMPT_V3_2_7.md'),
+      // V3.2.6 — VPS layout
       path.join(process.cwd(), '..', 'KarnatakaAI', '11_DDLR_App', 'DDLR_SYSTEM_PROMPT_V3_2_6.md'),
-      // VPS live copy
       '/root/aadesh-ai/KarnatakaAI/11_DDLR_App/DDLR_SYSTEM_PROMPT_V3_2_6.md',
-      // VPS source copy
       '/root/aadesh-ai-src/KarnatakaAI/11_DDLR_App/DDLR_SYSTEM_PROMPT_V3_2_6.md',
-      // Local Windows dev (Banu folder two levels up from nextjs/)
       path.join(process.cwd(), '..', '..', 'KarnatakaAI', '11_DDLR_App', 'DDLR_SYSTEM_PROMPT_V3_2_6.md'),
     ];
 
@@ -67,8 +71,8 @@ function loadV326FromDisk(): string | null {
       try {
         const content = fs.readFileSync(p, 'utf-8');
         if (content.trim().length > 100) {
-          _v326Content = content;
-          console.log(`[system-prompt] V3.2.6 loaded from: ${p} (${content.length} chars)`);
+          _promptContent = content;
+          console.log(`[system-prompt] loaded from: ${p} (${content.length} chars)`);
           return content;
         }
       } catch {
@@ -79,16 +83,16 @@ function loadV326FromDisk(): string | null {
     // fs/path not available — running in edge runtime or browser
   }
 
-  console.warn('[system-prompt] V3.2.6 not found at any path — falling back to V3.2.1 embedded prompt');
+  console.warn('[system-prompt] V3.2.7/V3.2.6 not found — falling back to V3.2.1 embedded prompt');
   return null;
 }
 
 /**
  * Build the system prompt with officer placeholders filled.
- * Uses V3.2.6 from disk if available; falls back to V3.2.1 embedded string.
+ * Prefers V3.2.7 from disk; falls back to V3.2.6 on disk; then V3.2.1 embedded string.
  */
 export function buildSystemPrompt(officer: OfficerProfile = DEFAULT_OFFICER): string {
-  const basePrompt = loadV326FromDisk() ?? SYSTEM_PROMPT_V321;
+  const basePrompt = loadPromptFromDisk() ?? SYSTEM_PROMPT_V321;
   return basePrompt
     .replace(/\[OFFICER_NAME\]/g, officer.officerName)
     .replace(/\[DISTRICT_AND_CITY\]/g, officer.districtAndCity)
