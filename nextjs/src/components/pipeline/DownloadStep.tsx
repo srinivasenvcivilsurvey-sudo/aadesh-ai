@@ -21,6 +21,8 @@ export function DownloadStep({ dispatch, locale, state, userId, officerName }: D
   const [error, setError] = useState('');
   const [downloadUrl, setDownloadUrl] = useState('');
   const [fileName, setFileName] = useState('');
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState('');
 
   useEffect(() => {
     exportDocx();
@@ -108,6 +110,42 @@ export function DownloadStep({ dispatch, locale, state, userId, officerName }: D
     }
   }
 
+  async function handleAssistanceReportDownload() {
+    const orderId = state.orderId;
+    if (!orderId) {
+      setReportError(kn ? 'ಆದೇಶ ID ಕಾಣೆಯಾಗಿದೆ / Order ID missing' : 'Order ID missing');
+      return;
+    }
+
+    setReportLoading(true);
+    setReportError('');
+    try {
+      const headers = await getAuthHeaders();
+      if (!headers) {
+        throw new Error(kn ? 'ಸೆಷನ್ ಮುಕ್ತಾಯ. ಮರುಲಾಗಿನ್ ಮಾಡಿ / Session expired.' : 'Session expired. Please login.');
+      }
+
+      const response = await fetch(`/api/pipeline/assistance-report?orderId=${encodeURIComponent(orderId)}`, {
+        method: 'GET',
+        headers,
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(data.error || 'Assistance Report failed');
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      triggerDownload(url, `aadesh_assistance_report_${orderId}.pdf`);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setReportError(err instanceof Error ? err.message : 'Assistance Report failed');
+    } finally {
+      setReportLoading(false);
+    }
+  }
+
   function handleRetry() {
     // Retry export WITHOUT re-running generation
     exportDocx();
@@ -179,6 +217,24 @@ export function DownloadStep({ dispatch, locale, state, userId, officerName }: D
         >
           <Download className="h-4 w-4" />
           {kn ? 'ಮತ್ತೆ ಡೌನ್\u200Cಲೋಡ್ ಮಾಡಿ' : 'Download Again'}
+        </button>
+
+        {reportError && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{reportError}</AlertDescription>
+          </Alert>
+        )}
+
+        <button
+          onClick={handleAssistanceReportDownload}
+          disabled={reportLoading || !state.orderId}
+          className="w-full py-3 px-4 bg-gray-900 text-white rounded-lg font-medium flex items-center justify-center gap-2 hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Download className="h-4 w-4" />
+          {reportLoading
+            ? (kn ? 'ವರದಿ ತಯಾರಾಗುತ್ತಿದೆ...' : 'Preparing report...')
+            : 'Download Assistance Report'}
         </button>
 
         <button
