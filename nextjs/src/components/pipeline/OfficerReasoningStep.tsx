@@ -106,8 +106,8 @@ export function OfficerReasoningStep({
   dispatch,
   locale,
   state,
-  userId: _userId,
 }: OfficerReasoningStepProps) {
+  // FIX: 2026-04-26 - Keep unused userId out of destructuring because Next build fails on unused props.
   const kn = locale === 'kn';
 
   const [keyIssue, setKeyIssue] = useState('');

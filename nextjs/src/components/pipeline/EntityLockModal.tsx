@@ -110,7 +110,8 @@ const NOTO_SANS_KANNADA: React.CSSProperties = {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-export function EntityLockModal({ dispatch, locale, state, userId: _userId }: EntityLockModalProps) {
+// FIX: 2026-04-26 - Keep unused userId out of destructuring because Next build fails on unused props.
+export function EntityLockModal({ dispatch, locale, state }: EntityLockModalProps) {
   const kn = locale === 'kn';
   const caseSummary = state.caseSummary;
 
