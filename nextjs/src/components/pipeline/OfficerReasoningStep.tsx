@@ -55,7 +55,7 @@ const DOCUMENT_OPTION_KN: Record<DocumentOption, string> = {
   'Survey Sketch': 'ಸರ್ವೆ ನಕ್ಷೆ',
   'Mutation Register': 'ಮ್ಯುಟೇಶನ್ ರಿಜಿಸ್ಟರ್',
   'Khata Extract': 'ಖಾತಾ ಉದ್ಧರಣ',
-  'Tax Receipt': 'ತೆರಿಗೆ 영수증',
+  'Tax Receipt': 'ತೆರಿಗೆ ರಸೀದಿ',
   Other: 'ಇತರ',
 };
 
