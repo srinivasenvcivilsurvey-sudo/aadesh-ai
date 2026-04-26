@@ -30,6 +30,11 @@ export function GeneratingStep({ dispatch, locale, state, userId, onComplete }: 
   const [countdown, setCountdown] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
   const hasStarted = useRef(false);
+  const idempotencyKeyRef = useRef(
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  );
 
   useEffect(() => {
     if (!hasStarted.current) {
@@ -70,6 +75,8 @@ export function GeneratingStep({ dispatch, locale, state, userId, onComplete }: 
           officerAnswers: state.officerAnswers,
           userId,
           sessionOrderCount: state.sessionOrderCount + 1,
+          order_id: state.orderId ?? state.receiptId,
+          idempotency_key: idempotencyKeyRef.current,
           // Legal Shield hashes (L1/L3/L3.5) — forwarded to generate route for manifest
           receiptId: state.receiptId,
           attestationHash: state.attestationHash,

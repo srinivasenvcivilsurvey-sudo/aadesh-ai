@@ -18,7 +18,14 @@ import { checkDailyLimit, formatResetTime } from '@/lib/pipeline/rateLimiter';
 import { logError, logException } from '@/lib/pipeline/errorLogger';
 import { validateEnv } from '@/lib/validateEnv';
 import { checkIpLimit } from '@/lib/ipRateLimiter';
-import { buildManifest } from '@/lib/pipeline/manifest';
+import {
+  computeFinalManifestHash,
+  computeManifestSeedHash,
+  sha256Hex,
+  timingSafeHexEqual,
+  validateGenerateGate,
+  type LegalOrderState,
+} from '@/lib/pipeline/legalState';
 import type { CaseSummary, OfficerAnswers } from '@/lib/pipeline/types';
 
 const GENERATION_MODEL = 'claude-sonnet-4-6';
@@ -27,6 +34,181 @@ const MAX_TOKENS = 8192;
 const GENERATION_TIMEOUT_MS = 120_000;
 const SIMPLE_CASE_TYPES = ['withdrawal', 'suo_motu'];
 const VALID_CASE_TYPES = ['contested_appeal', 'withdrawal', 'suo_motu', 'appeal', 'contested'];
+
+interface GenerateRequestBody {
+  caseType: string;
+  caseSummary: CaseSummary;
+  officerAnswers: OfficerAnswers;
+  sessionOrderCount?: number;
+  receiptId?: string | null;
+  order_id?: string | null;
+  idempotency_key?: string | null;
+  attestationHash?: string | null;
+  reasoningHash?: string | null;
+  inputFileSha256?: string | null;
+}
+
+interface LegalOrderRow {
+  id: string;
+  user_id: string;
+  state: LegalOrderState;
+  state_version: number;
+  upload_sha256: string | null;
+  attestation_hash: string | null;
+  reasoning_hash: string | null;
+  locked_at: string | null;
+  locked_name: string | null;
+  attestation_nonce: string | null;
+  attestation_nonce_consumed: boolean | null;
+  manifest_seed_hash: string | null;
+  idempotency_key: string | null;
+  generated_order?: string | null;
+  output_hash?: string | null;
+  final_manifest_hash?: string | null;
+}
+
+function jsonResponse(status: number, payload: Record<string, unknown>): Response {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+function getOrderId(body: GenerateRequestBody): string {
+  return (body.order_id ?? body.receiptId ?? '').trim();
+}
+
+async function loadLegalOrder(
+  adminClient: SupabaseClient,
+  orderId: string,
+  userId: string
+): Promise<LegalOrderRow | null> {
+  const { data, error } = await adminClient
+    .from('orders')
+    .select('id, user_id, state, state_version, upload_sha256, attestation_hash, reasoning_hash, locked_at, locked_name, attestation_nonce, attestation_nonce_consumed, manifest_seed_hash, idempotency_key, generated_order, output_hash, final_manifest_hash')
+    .eq('id', orderId)
+    .eq('user_id', userId)
+    .single();
+
+  if (error || !data) return null;
+  return data as LegalOrderRow;
+}
+
+function validateLegalPrerequisites(order: LegalOrderRow): { status: number; message: string } | null {
+  const gate = validateGenerateGate(order);
+  return gate.allowed ? null : { status: gate.status, message: gate.reason };
+}
+
+async function claimLegalGeneration(
+  adminClient: SupabaseClient,
+  order: LegalOrderRow,
+  userId: string,
+  promptVersion: string,
+  idempotencyKey: string
+): Promise<{ ok: true; seedHash: string } | { ok: false; status: number; message: string }> {
+  const prerequisiteError = validateLegalPrerequisites(order);
+  if (prerequisiteError) return { ok: false, ...prerequisiteError };
+
+  let current = order;
+  let seedHash = current.manifest_seed_hash ?? '';
+
+  if (current.state === 'reasoned') {
+    seedHash = computeManifestSeedHash({
+      user_id: userId,
+      order_id: current.id,
+      upload_sha256: current.upload_sha256!,
+      attestation_hash: current.attestation_hash!,
+      reasoning_hash: current.reasoning_hash!,
+      attestation_nonce: current.attestation_nonce!,
+      prompt_version: promptVersion,
+    });
+
+    const { data: seededRows, error: seedError } = await adminClient
+      .from('orders')
+      .update({
+        state: 'manifest_seeded',
+        state_version: Number(current.state_version) + 1,
+        manifest_seed_hash: seedHash,
+        seeded_at: new Date().toISOString(),
+      })
+      .eq('id', current.id)
+      .eq('user_id', userId)
+      .eq('state', 'reasoned')
+      .eq('state_version', current.state_version)
+      .select('id, user_id, state, state_version, upload_sha256, attestation_hash, reasoning_hash, locked_at, locked_name, attestation_nonce, attestation_nonce_consumed, manifest_seed_hash, idempotency_key')
+      .limit(1);
+
+    if (seedError || !seededRows || seededRows.length !== 1) {
+      return { ok: false, status: 409, message: 'concurrent manifest seed transition' };
+    }
+    current = seededRows[0] as LegalOrderRow;
+  }
+
+  const expectedSeed = computeManifestSeedHash({
+    user_id: userId,
+    order_id: current.id,
+    upload_sha256: current.upload_sha256!,
+    attestation_hash: current.attestation_hash!,
+    reasoning_hash: current.reasoning_hash!,
+    attestation_nonce: current.attestation_nonce!,
+    prompt_version: promptVersion,
+  });
+
+  if (!current.manifest_seed_hash || !timingSafeHexEqual(expectedSeed, current.manifest_seed_hash)) {
+    return { ok: false, status: 409, message: 'manifest seed mismatch' };
+  }
+
+  const { data: claimedRows, error: claimError } = await adminClient
+    .from('orders')
+    .update({
+      state: 'generating',
+      state_version: Number(current.state_version) + 1,
+      attestation_nonce_consumed: true,
+      idempotency_key: idempotencyKey,
+      gen_started_at: new Date().toISOString(),
+    })
+    .eq('id', current.id)
+    .eq('user_id', userId)
+    .eq('state', 'manifest_seeded')
+    .eq('state_version', current.state_version)
+    .eq('attestation_nonce_consumed', false)
+    .select('id')
+    .limit(1);
+
+  if (claimError || !claimedRows || claimedRows.length !== 1) {
+    return { ok: false, status: 409, message: 'concurrent generation transition or nonce replay' };
+  }
+
+  return { ok: true, seedHash: current.manifest_seed_hash };
+}
+
+async function markGenerationFailed(
+  adminClient: SupabaseClient,
+  orderId: string,
+  userId: string,
+  reason: string
+): Promise<void> {
+  const { data: order } = await adminClient
+    .from('orders')
+    .select('state_version')
+    .eq('id', orderId)
+    .eq('user_id', userId)
+    .eq('state', 'generating')
+    .maybeSingle();
+  if (!order) return;
+
+  await adminClient
+    .from('orders')
+    .update({
+      state: 'generation_failed',
+      state_version: Number((order as { state_version: number }).state_version) + 1,
+      generation_failed_at: new Date().toISOString(),
+      generation_failure_reason: reason.slice(0, 500),
+    })
+    .eq('id', orderId)
+    .eq('user_id', userId)
+    .eq('state', 'generating');
+}
 
 export async function POST(request: NextRequest): Promise<Response> {
   // FIX C9: IP rate limit BEFORE auth — prevents unauthenticated flood reaching AI calls
@@ -69,6 +251,45 @@ export async function POST(request: NextRequest): Promise<Response> {
   }
   const authenticatedUserId = authUser.id;
 
+  let requestBody: GenerateRequestBody;
+  try {
+    requestBody = await request.json() as GenerateRequestBody;
+  } catch {
+    return jsonResponse(400, { error: 'Invalid JSON body' });
+  }
+
+  const orderId = getOrderId(requestBody);
+  const idempotencyKey = (requestBody.idempotency_key ?? '').trim();
+  if (!orderId || !idempotencyKey) {
+    return jsonResponse(409, {
+      error: 'Missing legal order_id or idempotency_key. Upload, Entity Lock, and reasoning are required before generation.',
+    });
+  }
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return jsonResponse(500, { error: 'Server legal-state configuration missing' });
+  }
+
+  const preflightAdminClient = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+  const preflightOrder = await loadLegalOrder(preflightAdminClient, orderId, authenticatedUserId);
+  if (!preflightOrder) {
+    return jsonResponse(409, { error: 'Order legal state not found. Please upload again.' });
+  }
+  if (preflightOrder.state === 'generated' && preflightOrder.idempotency_key === idempotencyKey) {
+    return jsonResponse(200, {
+      output: preflightOrder.generated_order ?? '',
+      output_hash: preflightOrder.output_hash ?? null,
+      final_manifest_hash: preflightOrder.final_manifest_hash ?? null,
+      idempotent: true,
+    });
+  }
+  const preflightError = validateLegalPrerequisites(preflightOrder);
+  if (preflightError) {
+    return jsonResponse(preflightError.status, { error: preflightError.message });
+  }
+
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({
@@ -82,32 +303,22 @@ export async function POST(request: NextRequest): Promise<Response> {
       let creditDeducted = false;
       let generationSuccessful = false; // FIX C5: track success to avoid spurious refund
       let resolvedUserId = '';
+      let claimedOrderId = '';
 
       try {
         validateEnv();
 
-        const body = await request.json();
+        const body = requestBody;
         const {
           caseType,
           caseSummary,
           officerAnswers,
           sessionOrderCount = 1,
           receiptId = null,
-          attestationHash = null,
-          reasoningHash = null,
+          order_id = null,
+          idempotency_key = null,
           inputFileSha256 = null,
-        } = body as {
-          caseType: string;
-          caseSummary: CaseSummary;
-          officerAnswers: OfficerAnswers;
-          sessionOrderCount?: number;
-          receiptId?: string | null;
-          attestationHash?: string | null;
-          reasoningHash?: string | null;
-          inputFileSha256?: string | null;
-        };
-        const selectedModel = officerAnswers.selectedModel ?? 'sarvam';
-
+        } = body;
         resolvedUserId = authenticatedUserId;
         const userId = authenticatedUserId;
 
@@ -116,6 +327,9 @@ export async function POST(request: NextRequest): Promise<Response> {
           controller.close();
           return;
         }
+        const selectedModel = officerAnswers.selectedModel ?? 'sarvam';
+        const legalOrderId = (order_id ?? receiptId ?? '').trim();
+        const legalIdempotencyKey = (idempotency_key ?? '').trim();
 
         if (!VALID_CASE_TYPES.includes(caseType)) {
           send('error', { message: 'ಅಮಾನ್ಯ ಪ್ರಕರಣ ಪ್ರಕಾರ / Invalid case type' });
@@ -261,27 +475,27 @@ export async function POST(request: NextRequest): Promise<Response> {
           return;
         }
 
-        // ── Atomic credit deduction — only after all validations pass ────────
-        const { data: updateResult, error: deductError } = await adminClient
-          .from('profiles')
-          .update({
-            credits_remaining: (profile.credits_remaining ?? 1) - 1,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', userId)
-          .gte('credits_remaining', 1)
-          .select('credits_remaining')
-          .single();
-
-        if (deductError || !updateResult) {
-          send('error', {
-            message: 'ಕ್ರೆಡಿಟ್‌ಗಳು ಖಾಲಿಯಾಗಿವೆ / No credits remaining',
-            code: 'NO_CREDITS',
-          });
+        // ── Legal Shield hard gate: seed manifest and claim generation ───────
+        const legalOrder = await loadLegalOrder(adminClient, legalOrderId, userId);
+        if (!legalOrder) {
+          send('error', { message: 'ಕಾನೂನು ಸ್ಥಿತಿ ಕಾಣೆಯಾಗಿದೆ / Legal order state not found' });
           controller.close();
           return;
         }
-        creditDeducted = true;
+        const legalClaim = await claimLegalGeneration(
+          adminClient,
+          legalOrder,
+          userId,
+          PROMPT_VERSION,
+          legalIdempotencyKey
+        );
+        if (!legalClaim.ok) {
+          send('error', { message: legalClaim.message, code: 'LEGAL_STATE_ERROR' });
+          controller.close();
+          return;
+        }
+        const manifestSeedHash = legalClaim.seedHash;
+        claimedOrderId = legalOrderId;
 
         // ── Get personal prompt from profile ─────────────────────────────────
         const personalPrompt = (profile as Record<string, unknown>).personal_prompt as string | undefined;
@@ -490,90 +704,113 @@ export async function POST(request: NextRequest): Promise<Response> {
         // ── Log cache metrics ─────────────────────────────────────────────────
         logCacheMetrics(userId, cachedTokens, sessionOrderCount);
 
+        // ── Final credit and generated-state commit ───────────────────────────
+        const { data: creditRows, error: finalCreditError } = await adminClient
+          .from('profiles')
+          .update({
+            credits_remaining: (profile.credits_remaining ?? 1) - 1,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', userId)
+          .gte('credits_remaining', 1)
+          .select('credits_remaining')
+          .limit(1);
+
+        if (finalCreditError || !creditRows || creditRows.length !== 1) {
+          await markGenerationFailed(adminClient, legalOrderId, userId, 'credit deduction failed after generation');
+          send('error', {
+            message: 'ಕ್ರೆಡಿಟ್‌ಗಳು ಖಾಲಿಯಾಗಿವೆ / No credits remaining',
+            code: 'NO_CREDITS',
+          });
+          controller.close();
+          return;
+        }
+        creditDeducted = true;
+
+        const outputHash = sha256Hex(generatedText);
+        const generatedAt = new Date().toISOString();
+        const finalManifestHash = computeFinalManifestHash({
+          seed_hash: manifestSeedHash,
+          output_hash: outputHash,
+          model: modelUsed,
+          prompt_version: PROMPT_VERSION,
+          generated_at: generatedAt,
+          input_tokens: inputTokens ?? 0,
+          output_tokens: outputTokens ?? 0,
+        });
+
+        const { data: generatingOrder } = await adminClient
+          .from('orders')
+          .select('state_version')
+          .eq('id', legalOrderId)
+          .eq('user_id', userId)
+          .eq('state', 'generating')
+          .single();
+
+        if (!generatingOrder) {
+          await markGenerationFailed(adminClient, legalOrderId, userId, 'generating order row missing at final commit');
+          throw new Error('Legal order state changed during generation');
+        }
+
+        const { error: orderUpdateError } = await adminClient
+          .from('orders')
+          .update({
+            state: 'generated',
+            state_version: Number((generatingOrder as { state_version: number }).state_version) + 1,
+            generated_order: generatedText,
+            score: auditResult.score,
+            model_used: modelUsed,
+            version_number: 1,
+            output_hash: outputHash,
+            final_manifest_hash: finalManifestHash,
+            manifest_hash: finalManifestHash,
+            prompt_version: PROMPT_VERSION,
+            input_tokens: inputTokens || null,
+            output_tokens: outputTokens || null,
+            gen_finished_at: generatedAt,
+            input_pdf_sha256: inputFileSha256,
+          })
+          .eq('id', legalOrderId)
+          .eq('user_id', userId)
+          .eq('state', 'generating');
+
+        if (orderUpdateError) {
+          throw new Error(`Failed to commit generated order: ${orderUpdateError.message}`);
+        }
+
         // ── Done ──────────────────────────────────────────────────────────────
-        generationSuccessful = true; // FIX C5: mark success before sending to client
+        generationSuccessful = true;
         send('done', {
           guardrailScore: auditResult.score,
           cachedTokens,
           modelUsed,
-          creditsRemaining: updateResult.credits_remaining,
+          creditsRemaining: (creditRows[0] as { credits_remaining: number }).credits_remaining,
           promptVersion: PROMPT_VERSION,
           inputTokens: inputTokens || null,
           outputTokens: outputTokens || null,
-        });
-
-        // ── L4 Legal Shield: build tamper-evident manifest ────────────────────
-        let manifestHash: string | null = null;
-        let platformSignature: string | null = null;
-        try {
-          const storagePath = sessionOrderCount > 0 ? (receiptId ?? 'unknown') : 'unknown';
-          const manifestResult = buildManifest({
-            fileName: storagePath,
-            fileSha256: inputFileSha256 ?? '',
-            pageCount: 1,
-            extractedFields: caseSummary as unknown as Record<string, unknown>,
-            attestedBy: officerAnswers.officerName,
-            attestedAt: new Date().toISOString(),
-            attestationHash: attestationHash ?? '',
-            reasoningHash: reasoningHash ?? '',
-            keyIssue: '',
-            documentsRelied: [],
-            decisionReasoning: '',
-            orderText: generatedText,
-            model: modelUsed,
-            promptVersion: PROMPT_VERSION,
-            tokensIn: inputTokens ?? 0,
-            tokensOut: outputTokens ?? 0,
-          });
-          manifestHash = manifestResult.manifest_hash;
-          platformSignature = manifestResult.platform_signature;
-        } catch (manifestErr) {
-          // Non-fatal — manifest failure must never block order delivery
-          logError({
-            message: `Manifest build failed: ${manifestErr instanceof Error ? manifestErr.message : String(manifestErr)}`,
-            route: '/api/pipeline/generate',
-            userId,
-            severity: 'WARNING',
-            metadata: {},
-          });
-        }
-
-        // FIX M7: persist order to DB so it appears in my-orders and is never lost
-        await adminClient.from('orders').insert({
-          user_id: userId,
-          case_type: caseType,
-          generated_order: generatedText,
-          score: auditResult.score,
-          model_used: modelUsed,
-          version_number: 1,
-          // Legal Shield L1–L4 hashes
-          manifest_hash: manifestHash,
-          platform_signature: platformSignature,
-          attestation_hash: attestationHash,
-          reasoning_hash: reasoningHash,
-          input_pdf_sha256: inputFileSha256,
-        }).then(({ error: orderError }) => {
-          if (orderError) {
-            // Non-fatal: log but don't fail — user already has the generated text
-            logError({
-              message: `Failed to persist order to DB: ${orderError.message}`,
-              route: '/api/pipeline/generate',
-              userId,
-              severity: 'WARNING',
-              metadata: { error: orderError.message },
-            });
-          }
+          outputHash,
+          finalManifestHash,
         });
 
         controller.close();
       } catch (err) {
-        // FIX C5: only refund if credit was deducted AND generation did NOT succeed
-        // (avoids spurious refund when stream close fires after client already received 'done')
-        if (creditDeducted && !generationSuccessful && resolvedUserId) {
-          await refundCredit(resolvedUserId, createClient(
+        if (claimedOrderId && resolvedUserId && !generationSuccessful) {
+          await markGenerationFailed(createClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL!,
             process.env.SUPABASE_SERVICE_ROLE_KEY!
-          ));
+          ), claimedOrderId, resolvedUserId, err instanceof Error ? err.message : String(err));
+        }
+
+        // Credit is charged only after successful AI output. If a later commit
+        // fails after deduction, keep an ERROR log for manual reconciliation.
+        if (creditDeducted && !generationSuccessful && resolvedUserId) {
+          await logError({
+            message: `CRITICAL: generation failed after final credit deduction for user ${resolvedUserId}`,
+            route: '/api/pipeline/generate',
+            userId: resolvedUserId,
+            severity: 'ERROR',
+            metadata: { orderId: claimedOrderId, creditReconciliationNeeded: true },
+          });
         }
 
         await logException(err, {
@@ -620,47 +857,6 @@ function extractKeywords(cs: CaseSummary): string[] {
     .split(/\s+/)
     .map(w => w.replace(/[^\u0C00-\u0C7F\w]/g, '').trim())
     .filter(w => w.length > 3);
-}
-
-// ── Credit refund ─────────────────────────────────────────────────────────────
-
-async function refundCredit(userId: string, adminClient: SupabaseClient): Promise<void> {
-  // FIX B2: RPC only — no direct UPDATE fallback.
-  // If RPC partially executes before throwing, a direct UPDATE fallback gives user +2 credits.
-  // Unresolved refund failures are logged as CRITICAL for manual ops resolution.
-  try {
-    const { error } = await adminClient.rpc('increment_credits', {
-      user_uuid: userId,
-      amount: 1,
-    });
-
-    if (error) {
-      await logError({
-        message: `CRITICAL: increment_credits RPC failed for user ${userId}. Manual credit restoration required.`,
-        route: '/api/pipeline/generate',
-        userId,
-        severity: 'ERROR',
-        metadata: { rpcError: error.message, refundFailed: true },
-      });
-      return;
-    }
-
-    await logError({
-      message: `Credit refunded for user ${userId} due to generation failure`,
-      route: '/api/pipeline/generate',
-      userId,
-      severity: 'INFO',
-    });
-  } catch (refundErr) {
-    await logError({
-      message: `CRITICAL: Credit refund FAILED for user ${userId}. Manual resolution required.`,
-      stack: refundErr instanceof Error ? refundErr.stack : undefined,
-      route: '/api/pipeline/generate',
-      userId,
-      severity: 'ERROR',
-      metadata: { refundFailed: true },
-    });
-  }
 }
 
 // ── Claude generation with SSE streaming ─────────────────────────────────────

@@ -18,13 +18,18 @@
 export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createHash } from 'crypto';
 import { createClient } from '@supabase/supabase-js';
+import {
+  computeAttestationHash,
+  newAttestationNonce,
+  type LegalOrderState,
+} from '@/lib/pipeline/legalState';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface EntityLockBody {
   receipt_id: string;
+  order_id?: string;
   confirmed_fields: Record<string, string>;
   conflict_reasons: Record<string, string>;
   field_timings: Record<string, number>;
@@ -33,21 +38,6 @@ interface EntityLockBody {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function canonicalJson(obj: unknown): string {
-  if (obj === null || typeof obj !== 'object') return JSON.stringify(obj);
-  if (Array.isArray(obj)) return `[${obj.map(canonicalJson).join(',')}]`;
-  const sorted = Object.keys(obj as Record<string, unknown>).sort();
-  const pairs = sorted.map(k => {
-    const val = (obj as Record<string, unknown>)[k];
-    return `${JSON.stringify(k)}:${canonicalJson(val)}`;
-  });
-  return `{${pairs.join(',')}}`;
-}
-
-function sha256hex(input: string): string {
-  return createHash('sha256').update(input, 'utf8').digest('hex');
-}
 
 function fuzzyMatch(a: string, b: string): boolean {
   const norm = (s: string) => s.trim().toLowerCase();
@@ -91,6 +81,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const {
     receipt_id,
+    order_id,
     confirmed_fields,
     conflict_reasons,
     field_timings,
@@ -99,8 +90,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   } = body as Partial<EntityLockBody>;
 
   // ── Validation 1: required fields present ──────────────────────────────────
+  const orderId = typeof order_id === 'string' && order_id.trim()
+    ? order_id.trim()
+    : typeof receipt_id === 'string'
+      ? receipt_id.trim()
+      : '';
+
   if (
     typeof receipt_id !== 'string' || !receipt_id.trim() ||
+    !orderId ||
     !isRecord(confirmed_fields) ||
     !isRecord(conflict_reasons) ||
     !isRecord(field_timings) ||
@@ -141,7 +139,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // ── Validation 2: typed_name fuzzy-matches profiles.full_name ─────────────
   const { data: profile, error: profileError } = await adminClient
     .from('profiles')
-    .select('full_name')
+    .select('full_name, officer_name')
     .eq('id', user.id)
     .single();
 
@@ -153,7 +151,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  if (!fuzzyMatch(typed_name, (profile.full_name as string) ?? '')) {
+  const registeredName = ((profile.full_name as string | null) ?? (profile.officer_name as string | null) ?? '').trim();
+  if (!registeredName || !fuzzyMatch(typed_name, registeredName)) {
     return NextResponse.json(
       {
         error:
@@ -177,24 +176,100 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // ── Compute attestation hash ───────────────────────────────────────────────
+  // ── Server-side order state gate ───────────────────────────────────────────
+  const { data: order, error: orderError } = await adminClient
+    .from('orders')
+    .select('id, user_id, state, state_version, upload_sha256, attestation_nonce_consumed')
+    .eq('id', orderId)
+    .eq('user_id', user.id)
+    .single();
+
+  if (orderError || !order) {
+    return NextResponse.json(
+      { error: 'Order upload record not found. Please upload again. / ಅಪ್‌ಲೋಡ್ ದಾಖಲೆ ಕಾಣೆಯಾಗಿದೆ.' },
+      { status: 409 }
+    );
+  }
+
+  if ((order.state as LegalOrderState) !== 'uploaded') {
+    return NextResponse.json(
+      { error: `Entity Lock requires state=uploaded, got ${order.state}` },
+      { status: 409 }
+    );
+  }
+
+  if (!order.upload_sha256) {
+    return NextResponse.json(
+      { error: 'Upload hash missing. Please upload again. / ಅಪ್‌ಲೋಡ್ ಹ್ಯಾಶ್ ಕಾಣೆಯಾಗಿದೆ.' },
+      { status: 409 }
+    );
+  }
+
+  if (order.attestation_nonce_consumed) {
+    return NextResponse.json({ error: 'Attestation already consumed.' }, { status: 409 });
+  }
+
+  // ── Compute attestation hash with server-only nonce ───────────────────────
+  const attestation_nonce = newAttestationNonce();
+  const locked_at = new Date().toISOString();
   const payload: EntityLockBody = {
     receipt_id: receipt_id.trim(),
+    order_id: orderId,
     confirmed_fields: confirmed_fields as Record<string, string>,
     conflict_reasons: conflict_reasons as Record<string, string>,
     field_timings: field_timings as Record<string, number>,
     typed_name: typed_name.trim(),
-    attested_at: attested_at.trim(),
+    attested_at: locked_at,
   };
 
-  const attestation_hash = sha256hex(canonicalJson(payload));
+  const attestation_hash = computeAttestationHash({
+    user_id: user.id,
+    order_id: orderId,
+    locked_name: typed_name.trim(),
+    locked_at,
+    attestation_nonce,
+    confirmed_fields: payload.confirmed_fields,
+    conflict_reasons: payload.conflict_reasons,
+    field_timings: payload.field_timings,
+  });
+
+  const { data: updatedRows, error: updateError } = await adminClient
+    .from('orders')
+    .update({
+      state: 'entity_locked',
+      state_version: Number(order.state_version) + 1,
+      locked_name: typed_name.trim(),
+      locked_at,
+      attestation_nonce,
+      attestation_nonce_consumed: false,
+      attestation_hash,
+      confirmed_fields: payload.confirmed_fields,
+      conflict_reasons: payload.conflict_reasons,
+    })
+    .eq('id', orderId)
+    .eq('user_id', user.id)
+    .eq('state', 'uploaded')
+    .eq('state_version', order.state_version)
+    .select('id');
+
+  if (updateError || !updatedRows || updatedRows.length !== 1) {
+    console.error('[entity-lock] Order state update failed:', updateError?.message);
+    return NextResponse.json(
+      { error: 'Could not lock order state. Please retry. / ಲಾಕ್ ವಿಫಲ.' },
+      { status: 409 }
+    );
+  }
 
   // ── Write audit log ────────────────────────────────────────────────────────
   const { error: auditError } = await adminClient.from('audit_log').insert({
     user_id: user.id,
     receipt_id: payload.receipt_id,
     event_type: 'entity_lock_attested',
-    event_payload: payload,
+    event_payload: {
+      ...payload,
+      locked_at,
+      attestation_nonce: '[server-held]',
+    },
     event_hash: attestation_hash,
   });
 

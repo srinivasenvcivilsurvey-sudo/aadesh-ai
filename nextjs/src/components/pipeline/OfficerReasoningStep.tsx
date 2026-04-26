@@ -237,6 +237,7 @@ export function OfficerReasoningStep({
         },
         body: JSON.stringify({
           receipt_id: state.receiptId,
+          order_id: state.orderId ?? state.receiptId,
           attestation_hash: state.attestationHash,
           key_issue: keyIssue.trim(),
           documents_relied,

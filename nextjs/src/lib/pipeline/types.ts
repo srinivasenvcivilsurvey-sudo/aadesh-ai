@@ -166,6 +166,7 @@ export interface ValidateResponse {
   pageCount: number;
   fileType: AllowedFileType;
   error?: string;
+  orderId?: string;
 }
 
 // â”€â”€ Vision Read API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -179,6 +180,7 @@ export interface VisionReadResponse {
 // â”€â”€ Export DOCX API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface ExportDocxRequest {
+  orderId?: string | null;
   finalText: string;
   caseType: string;
   caseNumber: string;

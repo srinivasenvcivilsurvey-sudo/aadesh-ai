@@ -18,13 +18,18 @@
 export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createHash } from 'crypto';
 import { createClient } from '@supabase/supabase-js';
+import {
+  computeReasoningHash,
+  isLockExpired,
+  type LegalOrderState,
+} from '@/lib/pipeline/legalState';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface ReasoningBody {
   receipt_id: string;
+  order_id?: string;
   attestation_hash: string;
   key_issue: string;
   documents_relied: string[];
@@ -32,21 +37,6 @@ interface ReasoningBody {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function canonicalJson(obj: unknown): string {
-  if (obj === null || typeof obj !== 'object') return JSON.stringify(obj);
-  if (Array.isArray(obj)) return `[${obj.map(canonicalJson).join(',')}]`;
-  const sorted = Object.keys(obj as Record<string, unknown>).sort();
-  const pairs = sorted.map(k => {
-    const val = (obj as Record<string, unknown>)[k];
-    return `${JSON.stringify(k)}:${canonicalJson(val)}`;
-  });
-  return `{${pairs.join(',')}}`;
-}
-
-function sha256hex(input: string): string {
-  return createHash('sha256').update(input, 'utf8').digest('hex');
-}
 
 /**
  * Simplified server-side entity reference check.
@@ -94,6 +84,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const {
     receipt_id,
+    order_id,
     attestation_hash,
     key_issue,
     documents_relied,
@@ -101,8 +92,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   } = body as Partial<ReasoningBody>;
 
   // ── Validation 1: required fields present ──────────────────────────────────
+  const orderId = typeof order_id === 'string' && order_id.trim()
+    ? order_id.trim()
+    : typeof receipt_id === 'string'
+      ? receipt_id.trim()
+      : '';
+
   if (
     typeof receipt_id !== 'string' || !receipt_id.trim() ||
+    !orderId ||
     typeof attestation_hash !== 'string' || !attestation_hash.trim() ||
     typeof key_issue !== 'string' ||
     !Array.isArray(documents_relied) ||
@@ -175,17 +173,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // ── Compute reasoning hash ─────────────────────────────────────────────────
-  const payload: ReasoningBody = {
-    receipt_id: receipt_id.trim(),
-    attestation_hash: attestation_hash.trim(),
-    key_issue: key_issue.trim(),
-    documents_relied,
-    decision_reasoning: decision_reasoning.trim(),
-  };
-
-  const reasoning_hash = sha256hex(canonicalJson(payload));
-
   // ── Service-role client for DB writes ─────────────────────────────────────
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!serviceRoleKey) {
@@ -197,6 +184,89 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     serviceRoleKey
   );
+
+  // ── Server-side order state gate ───────────────────────────────────────────
+  const { data: order, error: orderError } = await adminClient
+    .from('orders')
+    .select('id, user_id, state, state_version, attestation_hash, locked_at, attestation_nonce_consumed')
+    .eq('id', orderId)
+    .eq('user_id', user.id)
+    .single();
+
+  if (orderError || !order) {
+    return NextResponse.json(
+      { error: 'Order record not found. Please upload again. / ಆದೇಶ ದಾಖಲೆ ಕಾಣೆಯಾಗಿದೆ.' },
+      { status: 409 }
+    );
+  }
+
+  if ((order.state as LegalOrderState) !== 'entity_locked') {
+    return NextResponse.json(
+      { error: `Reasoning requires state=entity_locked, got ${order.state}` },
+      { status: 409 }
+    );
+  }
+
+  if (order.attestation_hash !== attestation_hash.trim()) {
+    return NextResponse.json(
+      { error: 'Attestation hash mismatch. Please redo Entity Lock. / ದೃಢೀಕರಣ ಹ್ಯಾಶ್ ಹೊಂದಾಣಿಕೆ ಇಲ್ಲ.' },
+      { status: 409 }
+    );
+  }
+
+  if (order.attestation_nonce_consumed) {
+    return NextResponse.json({ error: 'Attestation already consumed.' }, { status: 409 });
+  }
+
+  if (!order.locked_at || isLockExpired(order.locked_at)) {
+    return NextResponse.json(
+      { error: 'Entity Lock expired. Please verify entities again. / ದೃಢೀಕರಣ ಅವಧಿ ಮುಗಿದಿದೆ.' },
+      { status: 410 }
+    );
+  }
+
+  // ── Compute reasoning hash ─────────────────────────────────────────────────
+  const payload: ReasoningBody = {
+    receipt_id: receipt_id.trim(),
+    order_id: orderId,
+    attestation_hash: attestation_hash.trim(),
+    key_issue: key_issue.trim(),
+    documents_relied,
+    decision_reasoning: decision_reasoning.trim(),
+  };
+
+  const reasoning_hash = computeReasoningHash({
+    user_id: user.id,
+    order_id: orderId,
+    attestation_hash: payload.attestation_hash,
+    key_issue: payload.key_issue,
+    documents_relied: payload.documents_relied,
+    decision_reasoning: payload.decision_reasoning,
+  });
+
+  const { data: updatedRows, error: updateError } = await adminClient
+    .from('orders')
+    .update({
+      state: 'reasoned',
+      state_version: Number(order.state_version) + 1,
+      reasoning_hash,
+      key_issue: payload.key_issue,
+      documents_relied: payload.documents_relied,
+      reasoning_text: payload.decision_reasoning,
+    })
+    .eq('id', orderId)
+    .eq('user_id', user.id)
+    .eq('state', 'entity_locked')
+    .eq('state_version', order.state_version)
+    .select('id');
+
+  if (updateError || !updatedRows || updatedRows.length !== 1) {
+    console.error('[reasoning] Order state update failed:', updateError?.message);
+    return NextResponse.json(
+      { error: 'Could not save reasoning state. Please retry. / ತಾರ್ಕಿಕ ಸ್ಥಿತಿ ಉಳಿಸಲು ವಿಫಲ.' },
+      { status: 409 }
+    );
+  }
 
   // ── Write audit log ────────────────────────────────────────────────────────
   const { error: auditError } = await adminClient.from('audit_log').insert({

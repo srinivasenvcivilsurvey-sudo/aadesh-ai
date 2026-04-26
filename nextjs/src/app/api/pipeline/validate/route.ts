@@ -56,6 +56,7 @@ interface ValidateResponseWithPath extends ValidateResponse {
   sizeBytes?: number;
   // L1 Legal Shield — returned only on successful multipart upload
   receiptId?: string;
+  orderId?: string;
   sha256?: string;
 }
 
@@ -107,11 +108,13 @@ async function runValidation(request: NextRequest, userId: string): Promise<Vali
   let mimeType: string;
   let originalName: string;
   let isMultipart = false;
+  let caseTypeHint: FormDataEntryValue | null = null;
 
   if (contentType.includes('multipart/form-data')) {
     isMultipart = true;
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
+    caseTypeHint = formData.get('caseTypeHint');
     if (!file) {
       return { valid: false, pageCount: 0, fileType: 'pdf', error: BILINGUAL_ERRORS.noFile };
     }
@@ -260,6 +263,34 @@ async function runValidation(request: NextRequest, userId: string): Promise<Vali
     console.warn('[validate] audit_log insert failed (non-fatal):', auditErr);
   }
 
+  const caseType = typeof caseTypeHint === 'string' && caseTypeHint.trim()
+    ? caseTypeHint.trim()
+    : fileType;
+
+  const { error: orderError } = await adminClient.from('orders').insert({
+    id: receiptId,
+    user_id: userId,
+    case_type: caseType,
+    input_text: '',
+    generated_order: '',
+    model_used: 'pending',
+    verified: false,
+    state: 'uploaded',
+    state_version: 0,
+    upload_sha256: sha256,
+    input_pdf_sha256: sha256,
+  });
+
+  if (orderError) {
+    console.error('[validate] orders insert failed:', orderError.message);
+    return {
+      valid: false,
+      pageCount,
+      fileType,
+      error: 'Could not create legal order record. Please retry. / ಕಾನೂನು ದಾಖಲೆ ಸೃಷ್ಟಿಸಲು ವಿಫಲ.',
+    };
+  }
+
   return {
     valid: true,
     pageCount,
@@ -267,6 +298,7 @@ async function runValidation(request: NextRequest, userId: string): Promise<Vali
     storagePath,
     sizeBytes: fileBuffer.length,
     receiptId,
+    orderId: receiptId,
     sha256,
   };
 }

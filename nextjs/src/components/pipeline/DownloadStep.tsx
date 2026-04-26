@@ -45,6 +45,7 @@ export function DownloadStep({ dispatch, locale, state, userId, officerName }: D
         method: 'POST',
         headers,
         body: JSON.stringify({
+          orderId: state.orderId,
           finalText,
           caseType: state.caseType ?? 'appeal',
           caseNumber: (() => {

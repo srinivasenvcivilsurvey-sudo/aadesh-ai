@@ -48,6 +48,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExportDoc
   try {
     const body = await request.json() as ExportDocxRequest;
     const {
+      orderId: existingOrderId,
       finalText,
       caseType,
       caseNumber,
@@ -88,7 +89,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExportDoc
     const fileName = `${safeCaseType}_${safeCaseNumber}_${safeDate}.docx`;
 
     // ── Save to Supabase Storage ──────────────────────────────────────────────
-    const orderId = crypto.randomUUID();
+    const orderId = existingOrderId || crypto.randomUUID();
     const storagePath = `orders/${userId}/${orderId}.docx`;
 
     const { error: storageError } = await adminClient.storage
@@ -111,10 +112,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExportDoc
       outputTokens ?? 0
     );
 
-    const { error: insertError } = await adminClient.from('orders').insert({
-      id: orderId,
-      user_id: userId,
-      case_type: caseType,
+    const orderPatch = {
       case_number: caseNumber || null,
       generated_order: finalText,
       score: guardrailScore ?? 0,
@@ -127,16 +125,27 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExportDoc
       output_tokens: outputTokens ?? null,
       acknowledgement_at: acknowledgementAt ?? null,
       generation_cost_rupees: costRupees,
-    });
-    if (insertError) {
-      console.error('[export-docx] orders insert error:', insertError.message);
-    }
+    };
 
-    // ── Deduct 1 credit from profile (GREATEST prevents < 0) ─────────────────
-    const { error: deductError } = await adminClient.rpc('deduct_credit', { user_id: userId });
-    if (deductError) {
-      // Log but never block the export — user already generated the file
-      console.error('[export-docx] credit deduction failed:', deductError.message);
+    if (existingOrderId) {
+      const { error: updateOrderError } = await adminClient.from('orders')
+        .update(orderPatch)
+        .eq('id', existingOrderId)
+        .eq('user_id', userId)
+        .eq('state', 'generated');
+      if (updateOrderError) {
+        console.error('[export-docx] orders update error:', updateOrderError.message);
+      }
+    } else {
+      const { error: insertError } = await adminClient.from('orders').insert({
+        id: orderId,
+        user_id: userId,
+        case_type: caseType,
+        ...orderPatch,
+      });
+      if (insertError) {
+        console.error('[export-docx] orders insert error:', insertError.message);
+      }
     }
 
     // ── Return download URL or direct buffer ──────────────────────────────────

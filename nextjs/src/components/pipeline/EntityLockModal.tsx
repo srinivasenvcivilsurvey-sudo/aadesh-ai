@@ -216,6 +216,7 @@ export function EntityLockModal({ dispatch, locale, state }: EntityLockModalProp
         },
         body: JSON.stringify({
           receipt_id: state.receiptId,
+          order_id: state.orderId ?? state.receiptId,
           confirmed_fields,
           conflict_reasons,
           field_timings: fieldTimings,
