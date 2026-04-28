@@ -327,7 +327,9 @@ export async function POST(request: NextRequest): Promise<Response> {
           controller.close();
           return;
         }
-        const selectedModel = officerAnswers.selectedModel ?? 'sarvam';
+        // Pricing v2: trial users get Sonnet-only (no Opus fallback). selectedModel
+        // is reassigned to 'anthropic' after the profile load if the user is on trial.
+        let selectedModel = officerAnswers.selectedModel ?? 'sarvam';
         const legalOrderId = (order_id ?? receiptId ?? '').trim();
         const legalIdempotencyKey = (idempotency_key ?? '').trim();
 
@@ -368,7 +370,7 @@ export async function POST(request: NextRequest): Promise<Response> {
         // ── Load profile (includes personal_prompt for per-user personalization) ──
         const { data: profile, error: profileError } = await adminClient
           .from('profiles')
-          .select('credits_remaining, officer_name, designation, district, salutation, full_name, personal_prompt, training_status')
+          .select('credits_remaining, officer_name, designation, district, salutation, full_name, personal_prompt, training_status, trial_credit_granted_at, trial_credit_used')
           .eq('id', userId)
           .single();
 
@@ -392,6 +394,19 @@ export async function POST(request: NextRequest): Promise<Response> {
           });
           controller.close();
           return;
+        }
+
+        // ── Pricing v2: Trial Sonnet-lock ──────────────────────────────────────
+        // If the user has a trial credit granted but never used (and no paid
+        // history is required by spec — but trial_credit_used is the simpler
+        // and race-safe predicate), force model = 'anthropic' (Sonnet) to block
+        // Opus / OpenRouter abuse on the free credit.
+        const isOnTrial =
+          profile.trial_credit_granted_at !== null &&
+          profile.trial_credit_used === false;
+        if (isOnTrial && selectedModel !== 'anthropic') {
+          console.log(`[generate] Trial user ${userId}: forcing Sonnet (was ${selectedModel})`);
+          selectedModel = 'anthropic';
         }
 
         // ── Fetch reference orders — smart scored selection (top 5 best match) ──
@@ -705,12 +720,19 @@ export async function POST(request: NextRequest): Promise<Response> {
         logCacheMetrics(userId, cachedTokens, sessionOrderCount);
 
         // ── Final credit and generated-state commit ───────────────────────────
+        // Pricing v2: if user was on trial credit, also flip trial_credit_used = TRUE
+        // so future generations no longer enforce the Sonnet-lock.
+        const finalUpdatePayload: Record<string, unknown> = {
+          credits_remaining: (profile.credits_remaining ?? 1) - 1,
+          updated_at: new Date().toISOString(),
+        };
+        if (isOnTrial) {
+          finalUpdatePayload.trial_credit_used = true;
+        }
+
         const { data: creditRows, error: finalCreditError } = await adminClient
           .from('profiles')
-          .update({
-            credits_remaining: (profile.credits_remaining ?? 1) - 1,
-            updated_at: new Date().toISOString(),
-          })
+          .update(finalUpdatePayload)
           .eq('id', userId)
           .gte('credits_remaining', 1)
           .select('credits_remaining')

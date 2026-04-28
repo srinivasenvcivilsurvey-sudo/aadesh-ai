@@ -3,11 +3,21 @@ import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 
 // Pack definitions — must match route.ts
+//
+// Pricing locked 2026-04-27 per AADESH_AI_PRICING_DECISION_v2.md.
+// Deprecated keys (pack_a..pack_d) RETAINED so in-flight payment_link
+// webhooks created before the launch deploy still resolve correctly.
 const PACKS: Record<string, { name: string; orders: number; priceInr: number }> = {
-  pack_a: { name: 'Pack A', orders: 7,  priceInr: 999  },
-  pack_b: { name: 'Pack B', orders: 18, priceInr: 1999 },
-  pack_c: { name: 'Pack C', orders: 32, priceInr: 3499 },
-  pack_d: { name: 'Pack D', orders: 55, priceInr: 5999 },
+  // ── Active (matches /api/razorpay POST checkout) ────────────────────
+  starter: { name: 'Starter', orders: 3,  priceInr: 999  },
+  regular: { name: 'Regular', orders: 5,  priceInr: 1499 },
+  pro:     { name: 'Pro',     orders: 10, priceInr: 2499 },
+
+  // ── Deprecated (back-compat ONLY) ──────────────────────────────────
+  pack_a: { name: 'Pack A (deprecated)', orders: 7,  priceInr: 999  },
+  pack_b: { name: 'Pack B (deprecated)', orders: 18, priceInr: 1999 },
+  pack_c: { name: 'Pack C (deprecated)', orders: 32, priceInr: 3499 },
+  pack_d: { name: 'Pack D (deprecated)', orders: 55, priceInr: 5999 },
 };
 
 // Razorpay webhook payload types

@@ -3,14 +3,39 @@ import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 
 // Recharge pack definitions (amounts in paise for Razorpay)
+//
+// Pricing locked 2026-04-27 per AADESH_AI_PRICING_DECISION_v2.md:
+//   - Trial (1 free) is INTERNAL ONLY — handled at /api/trial/grant, not Razorpay
+//   - Paid: Starter / Regular / Pro
+//
+// Deprecated keys (pack_a..pack_d) RETAINED for webhook back-compat so any
+// in-flight Razorpay orders/payment_links created before the launch deploy
+// still resolve correctly. They are NOT exposed in the UI and POST blocks
+// new checkout creation against them via ACTIVE_PACK_IDS.
 const PACKS = {
-  pack_a: { name: 'Pack A', orders: 7,  priceInr: 999,  amountPaise: 99900  },
-  pack_b: { name: 'Pack B', orders: 18, priceInr: 1999, amountPaise: 199900 },
-  pack_c: { name: 'Pack C', orders: 32, priceInr: 3499, amountPaise: 349900 },
-  pack_d: { name: 'Pack D', orders: 55, priceInr: 5999, amountPaise: 599900 },
+  // ── Active (exposed in UI, allowed for new checkouts) ───────────────
+  starter: { name: 'Starter', orders: 3,  priceInr: 999,  amountPaise: 99900  },
+  regular: { name: 'Regular', orders: 5,  priceInr: 1499, amountPaise: 149900 },
+  pro:     { name: 'Pro',     orders: 10, priceInr: 2499, amountPaise: 249900 },
+
+  // ── Deprecated (webhook back-compat ONLY — do NOT show in UI) ───────
+  // Remove after 30 days with no in-flight old-packId webhooks.
+  pack_a: { name: 'Pack A (deprecated)', orders: 7,  priceInr: 999,  amountPaise: 99900  },
+  pack_b: { name: 'Pack B (deprecated)', orders: 18, priceInr: 1999, amountPaise: 199900 },
+  pack_c: { name: 'Pack C (deprecated)', orders: 32, priceInr: 3499, amountPaise: 349900 },
+  pack_d: { name: 'Pack D (deprecated)', orders: 55, priceInr: 5999, amountPaise: 599900 },
 } as const;
 
 type PackId = keyof typeof PACKS;
+
+// Only these may be used for NEW checkout creation. Webhook/PUT verification
+// still resolves all PACKS keys (including deprecated) for back-compat.
+const ACTIVE_PACK_IDS = ['starter', 'regular', 'pro'] as const;
+type ActivePackId = typeof ACTIVE_PACK_IDS[number];
+
+function isActivePackId(value: unknown): value is ActivePackId {
+  return typeof value === 'string' && (ACTIVE_PACK_IDS as readonly string[]).includes(value);
+}
 
 // FIX (MEDIUM): timing-safe string comparison
 function timingSafeEqual(a: string, b: string): boolean {
@@ -63,9 +88,11 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { packId } = body;
 
-    if (!packId || !(packId in PACKS)) {
+    // Block deprecated packs from new checkouts. Webhook/PUT still resolves
+    // them for in-flight orders, but no fresh purchases at old prices.
+    if (!isActivePackId(packId)) {
       return NextResponse.json(
-        { error: 'Invalid pack. Choose: pack_a, pack_b, pack_c, pack_d' },
+        { error: 'Invalid pack. Choose: starter, regular, pro' },
         { status: 400 }
       );
     }
