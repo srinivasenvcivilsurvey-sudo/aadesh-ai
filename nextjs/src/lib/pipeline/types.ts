@@ -194,6 +194,7 @@ export interface ExportDocxRequest {
   inputTokens?: number | null;
   outputTokens?: number | null;
   acknowledgementAt?: string | null;
+  correctionApplied?: boolean;
 }
 
 export interface ExportDocxResponse {

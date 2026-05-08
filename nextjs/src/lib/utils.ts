@@ -19,6 +19,8 @@ export function generateRandomString(length = 8, charset = 'ABCDEFGHIJKLMNOPQRST
 // ─────────────────────────────────────────────────────────────────────────────
 // Smart Routing — Case Complexity Detection
 // Counts unique entities in case input. ≥ COMPLEXITY_THRESHOLD → 'complex'.
+// Signals: monetary amounts (Rs/₹), survey numbers, case refs (RP/CMP/WP…),
+// hearing dates, and proper nouns (party/place names).
 // ─────────────────────────────────────────────────────────────────────────────
 
 const COMPLEXITY_THRESHOLD = 5;
@@ -30,8 +32,9 @@ export interface ComplexitySignal {
   uniqueEntities: number;
   matches: {
     amounts: string[];
-    surveyKeywords: string[];
     surveyNumbers: string[];
+    caseRefs: string[];
+    dates: string[];
     properNouns: string[];
   };
 }
@@ -43,18 +46,35 @@ export function detectComplexity(caseDetails: string): CaseComplexity {
 export function analyzeComplexity(caseDetails: string): ComplexitySignal {
   const text = caseDetails ?? '';
 
-  const amounts = uniq(matchAll(text, /Rs\s*[\d,]+/gi));
-  const surveyKeywords = uniq(matchAll(text, /survey\s+no/gi).map(s => s.toLowerCase()));
-  const surveyNumbers = uniq(matchAll(text, /\b\d{1,4}\/[A-Z]?\d{1,4}\b/g));
+  // Monetary amounts: Rs 1,23,456 / ₹50000
+  const amounts = uniq(matchAll(text, /(?:Rs\.?\s*|₹)\s*[\d,]+(?:\.\d+)?/gi));
+
+  // Survey numbers: 123/A4, Survey No 45/2
+  const surveyNumbers = uniq(
+    matchAll(text, /\b(?:survey\s*(?:no\.?|number)?\s*)?\d{1,5}\/[A-Z0-9]{1,5}/gi)
+      .map(s => s.toLowerCase()),
+  );
+
+  // Case reference numbers: RP/23/2025, CMP 45/2024, WP 1234/2023
+  const caseRefs = uniq(
+    matchAll(text, /\b(?:RP|CMP|MFA|WP|CRZ|RFA|LA|LR)[-/]?\d+\/\d{2,4}/gi)
+      .map(s => s.toUpperCase()),
+  );
+
+  // Distinct hearing dates: 12/04/2024, 5-1-2025
+  const dates = uniq(matchAll(text, /\b\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}\b/g));
+
+  // Proper nouns: 2+ consecutive Title Case words (party/place names)
   const properNouns = uniq(extractProperNouns(text));
 
   const uniqueEntities =
-    amounts.length + surveyKeywords.length + surveyNumbers.length + properNouns.length;
+    amounts.length + surveyNumbers.length + caseRefs.length +
+    dates.length + properNouns.length;
 
   return {
     complexity: uniqueEntities >= COMPLEXITY_THRESHOLD ? 'complex' : 'simple',
     uniqueEntities,
-    matches: { amounts, surveyKeywords, surveyNumbers, properNouns },
+    matches: { amounts, surveyNumbers, caseRefs, dates, properNouns },
   };
 }
 
@@ -74,7 +94,7 @@ const PROPER_NOUN_STOPLIST = new Set([
 ]);
 
 function extractProperNouns(text: string): string[] {
-  const matches = text.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/g) ?? [];
+  const matches = text.match(/\b[A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})+\b/g) ?? [];
   return matches.filter(m => {
     const first = m.split(/\s+/)[0];
     return !PROPER_NOUN_STOPLIST.has(first);

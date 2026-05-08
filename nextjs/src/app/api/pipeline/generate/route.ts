@@ -10,6 +10,7 @@ import OpenAI from 'openai';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { buildPrompt, type OfficerProfile, type ReferenceOrder } from '@/lib/pipeline/buildPrompt';
 import { auditOrder, buildCorrectionInstruction } from '@/lib/pipeline/auditOrder';
+import { detectComplexity } from '@/lib/utils';
 import { withRetry, isRateLimit } from '@/lib/pipeline/withRetry';
 import { logCacheMetrics } from '@/lib/pipeline/logCacheMetrics';
 import { sarvamGenerate, SARVAM_MODEL_ID } from '@/lib/pipeline/sarvamGenerate';
@@ -522,7 +523,13 @@ export async function POST(request: NextRequest): Promise<Response> {
           salutation: profile.salutation ?? 'ಶ್ರೀ/ಶ್ರೀಮತಿ',
         };
 
-        const isSimplePath = SIMPLE_CASE_TYPES.includes(caseType.toLowerCase());
+        const isSimpleByType = SIMPLE_CASE_TYPES.includes(caseType.toLowerCase());
+        // For paid users: entity-count analysis can upgrade simple → complex.
+        // Trial users always take the simple path (no correction pass) to control cost.
+        const complexityResult = !isOnTrial
+          ? detectComplexity(JSON.stringify(caseSummary))
+          : 'simple';
+        const isSimplePath = isSimpleByType && complexityResult === 'simple';
 
         // ── PII Redaction ─────────────────────────────────────────────────────
         const caseContentText = JSON.stringify({ caseSummary, officerAnswers });
@@ -692,6 +699,7 @@ export async function POST(request: NextRequest): Promise<Response> {
         // ── Self-audit ────────────────────────────────────────────────────────
         // FIX B1: use redactedCaseSummary — original caseSummary has PII that leaks into audit DB logs
         let auditResult = await auditOrder(generatedText, redactedCaseSummary, caseType);
+        let correctionApplied = false;
 
         if (auditResult.failures.length > 0 && anthropicKey && !isSimplePath) {
           const correctionInstruction = buildCorrectionInstruction(auditResult);
@@ -713,6 +721,7 @@ export async function POST(request: NextRequest): Promise<Response> {
             generatedText = reinjectedCorrection;
             auditResult = await auditOrder(generatedText, redactedCaseSummary, caseType);
             send('correction', { text: generatedText });
+            correctionApplied = true;
           }
         }
 
@@ -812,6 +821,7 @@ export async function POST(request: NextRequest): Promise<Response> {
           outputTokens: outputTokens || null,
           outputHash,
           finalManifestHash,
+          correctionApplied,
         });
 
         controller.close();

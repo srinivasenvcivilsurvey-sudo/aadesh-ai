@@ -61,6 +61,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExportDoc
       inputTokens,
       outputTokens,
       acknowledgementAt,
+      correctionApplied,
     } = body;
 
     if (!finalText || !userId) {
@@ -125,6 +126,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExportDoc
       output_tokens: outputTokens ?? null,
       acknowledgement_at: acknowledgementAt ?? null,
       generation_cost_rupees: costRupees,
+      correction_applied: correctionApplied ?? false,
     };
 
     if (existingOrderId) {
