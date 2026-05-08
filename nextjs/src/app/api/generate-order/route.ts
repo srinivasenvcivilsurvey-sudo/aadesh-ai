@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateOrderSmart, DEFAULT_SYSTEM_PROMPT, normalizeNFKC } from '@/lib/sarvam';
+import { generateOrderSmart, DEFAULT_SYSTEM_PROMPT, normalizeNFKC, type PreferredModel } from '@/lib/sarvam';
 import { runGuardrails } from '@/lib/guardrails';
 import { createClient } from '@supabase/supabase-js';
 // Single rate limiter for entire app. Old src/lib/rateLimit.ts deleted Apr 11, 2026 (D-9.42).
 import { checkDailyLimit, formatResetTime } from '@/lib/pipeline/rateLimiter';
 import { getSmartContext, buildContextBlock } from '@/lib/smart-context';
 import { redactPII, reInjectPII } from '@/lib/pipeline/piiRedactor';
+import { analyzeComplexity } from '@/lib/utils';
+import { runSelfCorrection } from '@/lib/self-correction';
 
 const MAX_INPUT_LENGTH = 10_000; // characters
 
@@ -85,7 +87,7 @@ export async function POST(request: NextRequest) {
 
     const { data: profile, error: profileError } = await adminClient
       .from('profiles')
-      .select('credits_remaining, total_orders_generated')
+      .select('credits_remaining, total_orders_generated, trial_credit_granted_at, trial_credit_used')
       .eq('id', user.id)
       .single();
 
@@ -139,13 +141,18 @@ export async function POST(request: NextRequest) {
     // Combine context + previous cases + REDACTED user input (used by Sarvam path)
     const enrichedInput = contextBlock + redactedPrevCases + redactedCaseDetails;
 
-    // ── GENERATE ORDER (smart routing) ──────────────────
-    // contested → Claude Sonnet 4.6 via Direct Anthropic SDK (P-0.46: adaptive thinking + caching)
-    //             Falls back to OpenRouter if ANTHROPIC_API_KEY missing
-    // withdrawal / suo_motu → Sarvam 105B (FREE, fast)
-    //
-    // P-0.46 caching split: contextBlock (reference orders) is passed separately
-    // so Anthropic SDK can cache it independently from the per-order caseInput.
+    // ── SMART ROUTING (Phase 1, Task 2) ──────────────────
+    // Trial credit unused → Sonnet (best quality first impression).
+    // Paid + complex (≥5 unique entities) → Sonnet.
+    // Paid + simple → Sarvam 105B (₹0/order). Sarvam failure auto-falls back to Sonnet.
+    const trialUnused =
+      profile.trial_credit_granted_at != null && profile.trial_credit_used !== true;
+    const complexitySignal = analyzeComplexity(normalizedCaseDetails);
+    const preferredModel: PreferredModel =
+      trialUnused || complexitySignal.complexity === 'complex' ? 'sonnet' : 'sarvam';
+    console.log('[ROUTING] preferredModel=%s trialUnused=%s entities=%d',
+      preferredModel, trialUnused, complexitySignal.uniqueEntities);
+
     const startTime = Date.now();
     const result = await generateOrderSmart(
       {
@@ -157,7 +164,8 @@ export async function POST(request: NextRequest) {
       },
       sarvamKey,
       openRouterKey,
-      anthropicKey
+      anthropicKey,
+      preferredModel
     );
     const generationTime = ((Date.now() - startTime) / 1000).toFixed(1);
 
@@ -193,8 +201,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // ── SELF-CORRECTION PASS (Phase 1, Task 1 — Stage 8) ─
+    // Sonnet acts as a Karnataka government order reviewer. Returns either
+    // a corrected draft or the original with correction_applied=false.
+    const correction = await runSelfCorrection({
+      draft: processedContent,
+      caseInput: normalizedCaseDetails,
+      orderType,
+      anthropicKey,
+    });
+    const finalContent = correction.finalContent;
+
     // ── RUN GUARDRAILS ───────────────────────────────────
-    const guardrails = runGuardrails(processedContent, orderType, normalizedCaseDetails);
+    const guardrails = runGuardrails(finalContent, orderType, normalizedCaseDetails);
 
     // ── SAVE ORDER TO DATABASE ───────────────────────────
     const { data: savedOrder, error: saveError } = await adminClient
@@ -203,10 +222,13 @@ export async function POST(request: NextRequest) {
         user_id: user.id,
         case_type: orderType,
         input_text: normalizedCaseDetails,
-        generated_order: processedContent,
+        generated_order: finalContent,
         score: guardrails.allPassed ? 90 : 70,
         model_used: result.model,
         verified: false,
+        correction_applied: correction.correctionApplied,
+        correction_score: correction.correctionScore,
+        complexity: complexitySignal.complexity,
       })
       .select('id')
       .single();
@@ -219,13 +241,16 @@ export async function POST(request: NextRequest) {
     // ── DEDUCT 1 CREDIT ──────────────────────────────────
     // FIX 2026-03-30: Removed nested await inside .update() — the inner SELECT
     // was causing the UPDATE to fail silently. Now uses profile data already fetched above.
+    // Phase 1: also flips trial_credit_used=true on first spend after trial grant.
+    const creditUpdate: Record<string, unknown> = {
+      credits_remaining: profile.credits_remaining - 1,
+      total_orders_generated: (profile.total_orders_generated ?? 0) + 1,
+      updated_at: new Date().toISOString(),
+    };
+    if (trialUnused) creditUpdate.trial_credit_used = true;
     const { error: creditError } = await adminClient
       .from('profiles')
-      .update({
-        credits_remaining: profile.credits_remaining - 1,
-        total_orders_generated: (profile.total_orders_generated ?? 0) + 1,
-        updated_at: new Date().toISOString(),
-      })
+      .update(creditUpdate)
       .eq('id', user.id);
 
     if (creditError) {
@@ -236,10 +261,10 @@ export async function POST(request: NextRequest) {
     // ── RESPOND ──────────────────────────────────────────
     return NextResponse.json({
       success: true,
-      order: processedContent,
+      order: finalContent,
       orderId: savedOrder?.id || null,
       metadata: {
-        wordCount: result.wordCount,
+        wordCount: finalContent.split(/\s+/).filter(Boolean).length,
         model: result.model,
         tokensUsed: result.tokensUsed,
         orderType,
@@ -250,6 +275,12 @@ export async function POST(request: NextRequest) {
         totalRefs: smartContext.totalRefs,
         refSource: smartContext.source,
         degraded: result.degraded ?? false,
+        preferredModel,
+        complexity: complexitySignal.complexity,
+        uniqueEntities: complexitySignal.uniqueEntities,
+        correctionApplied: correction.correctionApplied,
+        correctionScore: correction.correctionScore,
+        correctionNotes: correction.reviewerNotes,
       },
       guardrails: {
         results: guardrails.results,

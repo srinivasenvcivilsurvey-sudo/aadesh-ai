@@ -8,6 +8,7 @@ import {
   AlignmentType,
   convertInchesToTwip,
 } from 'docx';
+import { generateKannadaPdf } from '@/lib/pdf-kannada';
 
 export async function POST(request: NextRequest) {
   try {
@@ -71,17 +72,30 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // PDF: Kannada font embedding not yet supported — return DOCX as fallback
-    // FIX: 2026-03-29 — Previous raw PDF generator replaced all Kannada with '?'
+    // PDF: Phase 1 — pdfmake + embedded Noto Sans Kannada renders Kannada Unicode.
+    // Falls back to DOCX if font fetch / PDF generation fails (e.g. offline build).
     if (format === 'pdf') {
-      const buffer = await generatePdf(orderText, orderType);
-      return new NextResponse(new Uint8Array(buffer), {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          'Content-Disposition': `attachment; filename="aadesh_order_${new Date().toISOString().split('T')[0]}.docx"`,
-        },
-      });
+      try {
+        const pdfBuffer = await generatePdf(orderText, orderType);
+        return new NextResponse(new Uint8Array(pdfBuffer), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/pdf',
+            'Content-Disposition': `attachment; filename="aadesh_order_${new Date().toISOString().split('T')[0]}.pdf"`,
+          },
+        });
+      } catch (pdfErr) {
+        console.error('PDF generation failed, returning DOCX fallback:', pdfErr);
+        const docxBuffer = await generateDocx(orderText, orderType);
+        return new NextResponse(new Uint8Array(docxBuffer), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'Content-Disposition': `attachment; filename="aadesh_order_${new Date().toISOString().split('T')[0]}.docx"`,
+            'X-PDF-Fallback': 'true',
+          },
+        });
+      }
     }
 
     return NextResponse.json({ error: 'Unknown format' }, { status: 400 });
@@ -180,16 +194,9 @@ async function generateDocx(orderText: string, orderType?: string): Promise<Buff
 }
 
 // ═══════════════════════════════════════════════════════════
-// PDF Generation — uses DOCX-to-PDF workaround for Kannada
-// Since raw PDF can't render Kannada without embedded fonts,
-// we generate the DOCX and return it with a .pdf-compatible message.
-// Phase 1A will add proper Kannada PDF via server-side font embedding.
+// PDF Generation — pdfmake + embedded Noto Sans Kannada (Phase 1)
 // ═══════════════════════════════════════════════════════════
 
 async function generatePdf(orderText: string, orderType?: string): Promise<Buffer> {
-  // FIX: 2026-03-29 — Raw PDF generator replaced ALL Kannada chars with '?'
-  // Workaround: Generate DOCX instead (which renders Kannada perfectly)
-  // and return it. The download route will set the correct content-type.
-  // Users get a working document they can open and print.
-  return generateDocx(orderText, orderType);
+  return generateKannadaPdf(orderText, orderType);
 }

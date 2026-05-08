@@ -209,52 +209,83 @@ async function callOpenRouterSonnet(
 }
 
 /**
- * Smart router: Sarvam 105B = DEFAULT for ALL order types (FREE, 91/100).
- * FIX 2026-04-16: Inverted routing per founder directive.
- *   PRIMARY  → Sarvam 105B (free, default for contested/appeal/withdrawal/suo_motu)
- *   FALLBACK 1 → Anthropic SDK (Claude Sonnet 4.6) — only on Sarvam failure
- *   FALLBACK 2 → OpenRouter Sonnet — only on Sarvam + Anthropic failure
- * Fallbacks return { degraded: true } so UI can warn.
+ * Smart router with explicit model preference.
+ *   preferredModel = 'sonnet' → Anthropic primary, Sarvam fallback (trial users + complex cases)
+ *   preferredModel = 'sarvam' → Sarvam primary, Anthropic + OpenRouter fallback (paid + simple)
+ * Sarvam 105B = ₹0/order; Sonnet ≈ ₹8/order. Fallbacks set { degraded: true }.
  */
+export type PreferredModel = 'sarvam' | 'sonnet';
+
 export async function generateOrderSmart(
   request: OrderGenerationRequest,
   sarvamKey: string,
   openRouterKey?: string,
-  anthropicKey?: string
+  anthropicKey?: string,
+  preferredModel: PreferredModel = 'sarvam'
 ): Promise<OrderGenerationResponse & { degraded?: boolean }> {
   const normalizedPrompt = normalizeNFKC(request.systemPrompt);
   const validAnthropicKey = anthropicKey && anthropicKey !== 'your_key_here' ? anthropicKey : undefined;
 
-  // PRIMARY: Sarvam 105B (FREE, default for all order types)
+  const trySarvam = () => generateOrder(request, sarvamKey);
+  const tryAnthropic = async () => {
+    if (!validAnthropicKey) throw new Error('Anthropic key not configured');
+    const refs = normalizeNFKC(request.referenceOrdersBlock ?? '');
+    const caseIn = normalizeNFKC(request.caseInputOnly ?? request.caseDetails);
+    return callAnthropicSonnet(normalizedPrompt, refs, caseIn, false, validAnthropicKey);
+  };
+  const tryOpenRouter = async () => {
+    if (!openRouterKey) throw new Error('OpenRouter key not configured');
+    const normalizedDetails = normalizeNFKC(request.caseDetails);
+    return callOpenRouterSonnet(normalizedPrompt, normalizedDetails, openRouterKey);
+  };
+
+  if (preferredModel === 'sonnet') {
+    if (validAnthropicKey) {
+      try {
+        return await tryAnthropic();
+      } catch (err) {
+        console.error('[ROUTING] Sonnet primary failed, falling back to Sarvam:', err instanceof Error ? err.message : err);
+      }
+    }
+    try {
+      const result = await trySarvam();
+      return { ...result, degraded: true };
+    } catch (sarvamErr) {
+      console.error('[ROUTING] Sarvam fallback failed:', sarvamErr instanceof Error ? sarvamErr.message : sarvamErr);
+    }
+    if (openRouterKey) {
+      try {
+        const result = await tryOpenRouter();
+        return { ...result, degraded: true };
+      } catch (orErr) {
+        console.error('[ROUTING] OpenRouter fallback failed:', orErr instanceof Error ? orErr.message : orErr);
+      }
+    }
+    throw new Error('All providers failed (sonnet preferred): Anthropic + Sarvam + OpenRouter exhausted.');
+  }
+
+  // preferredModel === 'sarvam'
   try {
-    return await generateOrder(request, sarvamKey);
+    return await trySarvam();
   } catch (sarvamErr) {
     console.error('[ROUTING] Sarvam primary failed, trying Anthropic fallback:', sarvamErr instanceof Error ? sarvamErr.message : sarvamErr);
   }
-
-  // FALLBACK 1: Anthropic SDK (Claude Sonnet 4.6)
   if (validAnthropicKey) {
     try {
-      const refs = normalizeNFKC(request.referenceOrdersBlock ?? '');
-      const caseIn = normalizeNFKC(request.caseInputOnly ?? request.caseDetails);
-      const result = await callAnthropicSonnet(normalizedPrompt, refs, caseIn, false, validAnthropicKey);
+      const result = await tryAnthropic();
       return { ...result, degraded: true };
     } catch (anthropicErr) {
       console.error('[ROUTING] Anthropic fallback failed, trying OpenRouter:', anthropicErr instanceof Error ? anthropicErr.message : anthropicErr);
     }
   }
-
-  // FALLBACK 2: OpenRouter Sonnet
   if (openRouterKey) {
-    const normalizedDetails = normalizeNFKC(request.caseDetails);
     try {
-      const result = await callOpenRouterSonnet(normalizedPrompt, normalizedDetails, openRouterKey);
+      const result = await tryOpenRouter();
       return { ...result, degraded: true };
     } catch (orErr) {
       console.error('[ROUTING] OpenRouter fallback failed:', orErr instanceof Error ? orErr.message : orErr);
     }
   }
-
   throw new Error('All providers failed: Sarvam primary + Anthropic/OpenRouter fallbacks exhausted.');
 }
 
