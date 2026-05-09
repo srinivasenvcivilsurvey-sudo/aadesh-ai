@@ -55,11 +55,15 @@ function loadPromptFromDisk(): string | null {
 
     // V3.2.7 preferred; V3.2.6 fallback if V3.2.7 not yet deployed.
     const promptPaths = [
-      // V3.2.7 — VPS layout
+      // V3.2.7 — Netlify/serverless: bundled inside nextjs/ directory
+      path.join(process.cwd(), 'system-prompts', 'DDLR_SYSTEM_PROMPT_V3_2_7.md'),
+      // V3.2.7 — VPS layout (process.cwd() = nextjs/)
       path.join(process.cwd(), '..', 'KarnatakaAI', '11_DDLR_App', 'DDLR_SYSTEM_PROMPT_V3_2_7.md'),
       '/root/aadesh-ai/KarnatakaAI/11_DDLR_App/DDLR_SYSTEM_PROMPT_V3_2_7.md',
       '/root/aadesh-ai-src/KarnatakaAI/11_DDLR_App/DDLR_SYSTEM_PROMPT_V3_2_7.md',
       path.join(process.cwd(), '..', '..', 'KarnatakaAI', '11_DDLR_App', 'DDLR_SYSTEM_PROMPT_V3_2_7.md'),
+      // V3.2.6 — Netlify/serverless fallback
+      path.join(process.cwd(), 'system-prompts', 'DDLR_SYSTEM_PROMPT_V3_2_6.md'),
       // V3.2.6 — VPS layout
       path.join(process.cwd(), '..', 'KarnatakaAI', '11_DDLR_App', 'DDLR_SYSTEM_PROMPT_V3_2_6.md'),
       '/root/aadesh-ai/KarnatakaAI/11_DDLR_App/DDLR_SYSTEM_PROMPT_V3_2_6.md',
