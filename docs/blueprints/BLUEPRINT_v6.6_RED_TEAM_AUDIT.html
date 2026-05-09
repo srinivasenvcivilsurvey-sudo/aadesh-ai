@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blueprint v6.6 — Red Team Audit</title>
+<style>
+  :root { --red: #dc2626; --amber: #d97706; --green: #16a34a; --bg: #0f172a; --card: #1e293b; --text: #e2e8f0; --muted: #94a3b8; --border: #334155; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; padding: 2rem; max-width: 1100px; margin: 0 auto; }
+  h1 { font-size: 1.8rem; margin-bottom: 0.5rem; color: #f8fafc; }
+  .subtitle { color: var(--muted); margin-bottom: 2rem; font-size: 0.95rem; }
+  .verdict-box { background: linear-gradient(135deg, #7f1d1d, #991b1b); border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; border-left: 5px solid var(--red); }
+  .verdict-box h2 { color: #fca5a5; font-size: 1.1rem; margin-bottom: 0.5rem; }
+  .verdict-box p { color: #fecaca; font-size: 0.95rem; }
+  .section { margin-bottom: 2.5rem; }
+  .section-title { font-size: 1.2rem; color: #60a5fa; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); }
+  .q-card { background: var(--card); border-radius: 10px; padding: 1.2rem 1.5rem; margin-bottom: 1rem; border-left: 4px solid var(--border); }
+  .q-card.critical { border-left-color: var(--red); }
+  .q-card.warning { border-left-color: var(--amber); }
+  .q-card.ok { border-left-color: var(--green); }
+  .q-num { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .q-title { font-weight: 700; font-size: 1rem; margin: 0.3rem 0 0.6rem; }
+  .severity { display: inline-block; font-size: 0.7rem; padding: 2px 8px; border-radius: 4px; font-weight: 600; margin-left: 0.5rem; vertical-align: middle; }
+  .sev-critical { background: #7f1d1d; color: #fca5a5; }
+  .sev-warning { background: #78350f; color: #fcd34d; }
+  .sev-ok { background: #14532d; color: #86efac; }
+  .q-body { font-size: 0.9rem; color: #cbd5e1; }
+  .q-body p { margin-bottom: 0.5rem; }
+  .q-body strong { color: #f1f5f9; }
+  .q-body ul { padding-left: 1.2rem; margin: 0.5rem 0; }
+  .q-body li { margin-bottom: 0.3rem; }
+  table { width: 100%; border-collapse: collapse; margin: 0.8rem 0; font-size: 0.85rem; }
+  th { background: #0f172a; color: #94a3b8; text-align: left; padding: 0.5rem 0.8rem; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; }
+  td { padding: 0.5rem 0.8rem; border-top: 1px solid var(--border); }
+  .fix { background: #1a2332; border-radius: 6px; padding: 0.8rem 1rem; margin-top: 0.6rem; border-left: 3px solid #3b82f6; font-size: 0.85rem; }
+  .fix strong { color: #93c5fd; }
+  .scorecard { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem; }
+  .score-item { background: var(--card); border-radius: 8px; padding: 1rem; text-align: center; }
+  .score-label { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; }
+  .score-val { font-size: 1.8rem; font-weight: 800; margin: 0.3rem 0; }
+  .score-val.red { color: #f87171; }
+  .score-val.amber { color: #fbbf24; }
+  .score-val.green { color: #4ade80; }
+  .swot { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1rem 0; }
+  .swot-box { background: var(--card); border-radius: 8px; padding: 1rem; }
+  .swot-box h4 { font-size: 0.8rem; text-transform: uppercase; margin-bottom: 0.5rem; }
+  .swot-s h4 { color: #4ade80; }
+  .swot-w h4 { color: #f87171; }
+  .swot-o h4 { color: #60a5fa; }
+  .swot-t h4 { color: #fbbf24; }
+  .swot-box ul { padding-left: 1rem; font-size: 0.85rem; }
+  .swot-box li { margin-bottom: 0.3rem; }
+  .reco { background: linear-gradient(135deg, #1e3a5f, #1e293b); border-radius: 10px; padding: 1.2rem 1.5rem; margin-bottom: 1rem; border-left: 4px solid #3b82f6; }
+  .reco h4 { color: #93c5fd; margin-bottom: 0.5rem; }
+  .reco p { font-size: 0.9rem; }
+</style>
+</head>
+<body>
+
+<h1>🔴 BLUEPRINT v6.6 — RED TEAM AUDIT</h1>
+<p class="subtitle">Independent critical review | March 28, 2026 | Aadesh AI</p>
+
+<div class="verdict-box">
+  <h2>EXECUTIVE VERDICT</h2>
+  <p><strong>The blueprint is ambitious and well-structured, but contains 4 critical factual errors and 3 timeline fantasies that will cause real pain if not fixed before April 5.</strong> The product idea is sound. The execution plan has holes. The biggest risk isn't technology — it's the founder believing the CTO's optimistic timelines because the CTO is an AI that doesn't feel deadline pressure.</p>
+</div>
+
+<div class="scorecard">
+  <div class="score-item"><div class="score-label">Critical Issues</div><div class="score-val red">4</div></div>
+  <div class="score-item"><div class="score-label">Warnings</div><div class="score-val amber">6</div></div>
+  <div class="score-item"><div class="score-label">OK / Minor</div><div class="score-val green">3</div></div>
+  <div class="score-item"><div class="score-label">Blueprint Grade</div><div class="score-val amber">C+</div></div>
+</div>
+
+<!-- SECTION A: ARCHITECTURE RED TEAM -->
+<div class="section">
+<h2 class="section-title">A. ARCHITECTURE RED TEAM</h2>
+
+<div class="q-card critical">
+  <div class="q-num">Question 1 <span class="severity sev-critical">CRITICAL</span></div>
+  <div class="q-title">Context overflow: 50 orders on 128K model</div>
+  <div class="q-body">
+    <p><strong>The blueprint contradicts itself.</strong> It says "50 maximum per user" AND "smart-context sends 16K." But it also says "Test J: send ALL 50 orders with 1M context." Sarvam 105B has 128K context, not 1M. Only Gemini 2.5 Pro has 1M.</p>
+    <p><strong>What actually happens if someone uploads 50 orders:</strong></p>
+    <ul>
+      <li>50 Kannada DDLR orders × ~2,500 tokens each = ~125,000 tokens</li>
+      <li>Add system prompt (4K) + facts (2K) + thinking overhead = <strong>~135K tokens → OVERFLOW on Sarvam 128K</strong></li>
+      <li>Smart-context (16K) saves you, but only if it's ALWAYS used. The blueprint leaves the door open for full-context mode.</li>
+    </ul>
+    <div class="fix"><strong>Fix:</strong> Hard-cap at 50 orders in storage, but NEVER send more than 5-8 in context. Smart-context is not optional — it's mandatory. Remove "full 50-order context" as an option for Sarvam. Test J should only test against Gemini/Claude which actually have 1M context.</div>
+  </div>
+</div>
+
+<div class="q-card warning">
+  <div class="q-num">Question 2 <span class="severity sev-warning">WARNING</span></div>
+  <div class="q-title">Auto-prompt from mixed-style orders</div>
+  <div class="q-body">
+    <p>If a caseworker uploads 20 orders from 3 different officers (which Banu likely will — he's collecting from colleagues), the auto-generated prompt will be a <strong>confused average of 3 styles</strong>.</p>
+    <p>The blueprint assumes "upload YOUR best orders" but real-world behavior will be "upload whatever I can find." There's no style-consistency check.</p>
+    <div class="fix"><strong>Fix:</strong> Add a clustering step before auto-prompt. Group orders by writing style (sentence length, vocabulary fingerprint, section ordering). If >1 cluster detected, ask user: "These seem to be from different writers. Use all, or pick one style?" This is a Phase 1B feature, not a blocker.</div>
+  </div>
+</div>
+
+<div class="q-card critical">
+  <div class="q-num">Question 3 <span class="severity sev-critical">CRITICAL</span></div>
+  <div class="q-title">Corrections replace originals — no rollback</div>
+  <div class="q-body">
+    <p><strong>"Corrections replace originals in reference set"</strong> — this is destructive by design. If Banu makes 3 corrections and 1 is wrong, that wrong correction is now your training data. There is no version history, no undo, no way to know which correction degraded quality.</p>
+    <p>This is like a textbook with no errata process. Once the wrong answer is printed, every student learns it.</p>
+    <div class="fix"><strong>Fix:</strong> Never delete originals. Keep a version chain: Original → Correction v1 → Correction v2. Use the LATEST version for generation, but keep ALL versions. Add a "revert to original" button. This is 2 extra database columns — trivial to implement, catastrophic to skip.</div>
+  </div>
+</div>
+
+<div class="q-card warning">
+  <div class="q-num">Question 4 <span class="severity sev-warning">WARNING</span></div>
+  <div class="q-title">Self-validation: AI judges its own work</div>
+  <div class="q-body">
+    <p>The self-validation design (hold back 3 orders, generate from facts, compare vs originals) is <strong>clever but has a known bias</strong>: the same model that generates will also judge. LLMs consistently rate their own output higher than human evaluators do.</p>
+    <p>However, the blueprint's approach is better than pure self-rating because it compares against a REAL answer key (the original order). The comparison is structural (sections present, facts preserved), not subjective ("is this good?").</p>
+    <div class="fix"><strong>Fix:</strong> Acceptable for Phase 0-1. But track Banu's manual corrections as ground truth. If self-validation says 95% but Banu corrects 30% of orders, your self-validation is lying. Add a "validation accuracy" metric: % of times self-validation score matches Banu's actual satisfaction.</div>
+  </div>
+</div>
+
+<div class="q-card warning">
+  <div class="q-num">Question 5 <span class="severity sev-warning">WARNING</span></div>
+  <div class="q-title">19-stage pipeline for MVP — over-engineered?</div>
+  <div class="q-body">
+    <p><strong>Yes, for Phase 0.</strong> 19 stages is a production pipeline. For MVP, you need maybe 8:</p>
+    <table>
+      <tr><th>Stage</th><th>MVP?</th><th>Why</th></tr>
+      <tr><td>1. Upload PDF</td><td>✅</td><td>Core input</td></tr>
+      <tr><td>2. OCR</td><td>✅</td><td>Can't read PDFs without it</td></tr>
+      <tr><td>3-6. Auto-detect + extract + cross-check</td><td>⚠️ Simplify</td><td>Do basic extraction, skip cross-check</td></tr>
+      <tr><td>7. Confirm facts</td><td>✅</td><td>Human safety net</td></tr>
+      <tr><td>8-10. Context + route + generate</td><td>✅</td><td>Core generation</td></tr>
+      <tr><td>11-17. Seven guardrails</td><td>⚠️ Keep 3</td><td>Section check + fact check + anti-transliteration. Skip the rest for MVP.</td></tr>
+      <tr><td>18-19. DOCX + download</td><td>✅</td><td>Core output</td></tr>
+    </table>
+    <p><strong>Minimum viable pipeline: 10 stages.</strong> The other 9 are quality-of-life improvements for Phase 1-2.</p>
+    <div class="fix"><strong>Fix:</strong> Ship 10-stage MVP by April 5. Add remaining 9 stages in Phase 1A-1B. Don't let perfect be the enemy of shipped.</div>
+  </div>
+</div>
+</div>
+
+<!-- SECTION B: TECH VALIDATION -->
+<div class="section">
+<h2 class="section-title">B. TECH VALIDATION</h2>
+
+<div class="q-card critical">
+  <div class="q-num">Question 6 <span class="severity sev-critical">CRITICAL</span></div>
+  <div class="q-title">Next.js + Supabase + Claude Code in 3 days — honest timeline</div>
+  <div class="q-body">
+    <p><strong>No. Not even close.</strong> Here's the honest breakdown:</p>
+    <table>
+      <tr><th>Task</th><th>Realistic Time</th><th>Blueprint Says</th></tr>
+      <tr><td>Next.js app scaffold + routing</td><td>1 day</td><td rowspan="4">3 days<br>(Mar 28-30)</td></tr>
+      <tr><td>Supabase Auth + file upload + DB</td><td>2-3 days</td></tr>
+      <tr><td>AI integration (Sarvam + OpenRouter)</td><td>2 days</td></tr>
+      <tr><td>OCR pipeline + fact extraction</td><td>2-3 days</td></tr>
+      <tr><td>DOCX generation in Next.js</td><td>1-2 days</td></tr>
+      <tr><td>7 guardrails (even 3 for MVP)</td><td>1-2 days</td></tr>
+      <tr><td>UI/UX (Kannada, mobile-friendly)</td><td>2 days</td></tr>
+      <tr><td>Testing + debugging</td><td>2-3 days</td></tr>
+      <tr><td><strong>TOTAL</strong></td><td><strong>13-18 days</strong></td><td><strong>3 days</strong></td></tr>
+    </table>
+    <p><strong>The blueprint is off by 4-6x.</strong> Claude Code is fast, but it can't parallelize its own work. Each feature needs testing, Kannada validation, and integration testing. A non-technical founder cannot debug Claude Code's mistakes.</p>
+    <p><strong>Also: you're REWRITING from Streamlit to Next.js.</strong> The working 713-line Streamlit app gets thrown away. That's not "building" — that's rebuilding from zero on a new framework during a deadline.</p>
+    <div class="fix"><strong>Fix:</strong> Don't rewrite. <strong>Deploy the existing Streamlit app.</strong> It works. Put it on Streamlit Cloud or a ₹500/month VPS. Ship what you have. Rewrite to Next.js in Phase 1A when there's no deadline pressure. The best code is the code that's already working.</div>
+  </div>
+</div>
+
+<div class="q-card warning">
+  <div class="q-num">Question 7 <span class="severity sev-warning">WARNING</span></div>
+  <div class="q-title">Sarvam 105B quality — 90/100 reliable across case types?</div>
+  <div class="q-body">
+    <p>The 90/100 score was benchmarked on <strong>one case type</strong> (DDLR appeal orders, likely Hesaraghatta). No evidence it holds for mutations, corrections, suo motu, or review orders. Different order types have different structures, legal language, and section requirements.</p>
+    <p>90/100 on appeals could be 70/100 on mutations. We don't know.</p>
+    <div class="fix"><strong>Fix:</strong> Before locking Sarvam as default, test on at least 3 case types × 3 orders each = 9 orders minimum. Score each. If any type drops below 85, route that type to Sonnet automatically. This is a 2-hour test — do it before April 5.</div>
+  </div>
+</div>
+
+<div class="q-card warning">
+  <div class="q-num">Question 8 <span class="severity sev-warning">WARNING</span></div>
+  <div class="q-title">python-docx with Kannada complex_script</div>
+  <div class="q-body">
+    <p><strong>Known issues confirmed by research:</strong></p>
+    <ul>
+      <li>python-docx can SET Kannada text, but <strong>font styling (bold, italic) may not apply correctly</strong> to non-ASCII Unicode characters</li>
+      <li>Conjunct characters (ottakshara) in Kannada may not render correctly in all viewers</li>
+      <li>The document looks fine in MS Word but may break in LibreOffice or Google Docs</li>
+    </ul>
+    <p>Since your users are government officers using Windows + MS Word, this is probably OK. But test with the actual fonts (Tunga, Noto Sans Kannada) on a real government PC.</p>
+    <div class="fix"><strong>Fix:</strong> Get one DOCX file onto Banu's actual office computer and verify it opens correctly. If bold headers don't render, switch to fpdf2 for PDF output (better Unicode support). This is a 10-minute test — do it in Phase 0.</div>
+  </div>
+</div>
+
+<div class="q-card warning">
+  <div class="q-num">Question 9 <span class="severity sev-warning">WARNING</span></div>
+  <div class="q-title">Sarvam Vision OCR — 100 pages/month free</div>
+  <div class="q-body">
+    <p><strong>For Phase 0 with 1 user (Banu): probably enough.</strong> Each case file is 2-5 pages. Banu testing 2-3 cases = ~15 pages. Well within 100.</p>
+    <p><strong>But Phase 1 with 10 users:</strong> 10 users × 5 cases/month × 3 pages = 150 pages. Already over free tier. Professional tier is ₹2,999/month for 5,000 pages.</p>
+    <div class="fix"><strong>Fix:</strong> Phase 0 is fine. Budget ₹2,999/month for Sarvam Vision from Phase 1. Fallback: Google Cloud Vision (₹0.12/page, no free tier but pay-as-you-go). Add this to the cost model.</div>
+  </div>
+</div>
+
+<div class="q-card critical">
+  <div class="q-num">Question 10 <span class="severity sev-critical">CRITICAL</span></div>
+  <div class="q-title">Vercel free tier + Supabase Mumbai — two factual errors</div>
+  <div class="q-body">
+    <p><strong>Error 1: Vercel free tier has a 10-second function timeout.</strong> An AI generation call (Sarvam 105B processing a Kannada order with thinking) takes 15-45 seconds. <strong>Every generation request will timeout on Vercel free tier.</strong></p>
+    <p><strong>Error 2: Supabase Mumbai region is NOT available on the free tier.</strong> Free tier defaults to Singapore. Mumbai requires Pro plan ($25/month = ~₹2,100/month). The blueprint's DPDPA compliance table claiming "Supabase Storage Mumbai ✅" on free tier is <strong>factually incorrect</strong>.</p>
+    <table>
+      <tr><th>Claim in Blueprint</th><th>Reality</th></tr>
+      <tr><td>Vercel free = ₹0</td><td>10s timeout kills AI calls. Pro = $20/month</td></tr>
+      <tr><td>Supabase Mumbai free = ₹0</td><td>Mumbai needs Pro = $25/month</td></tr>
+      <tr><td>Total infra: ₹2,100-3,350</td><td>Actual minimum: ₹3,750-5,500</td></tr>
+    </table>
+    <div class="fix"><strong>Fix:</strong> Either (a) use an India VPS (₹500-1,000/month, no timeout limits, full control) OR (b) budget $45/month for Vercel Pro + Supabase Pro. The "₹0 infrastructure" story in the blueprint is fiction. Correct the cost table before showing to any investor.</div>
+  </div>
+</div>
+</div>
+
+<!-- SECTION C: SCALE STRESS -->
+<div class="section">
+<h2 class="section-title">C. SCALE STRESS</h2>
+
+<div class="q-card ok">
+  <div class="q-num">Question 11 <span class="severity sev-ok">MANAGEABLE</span></div>
+  <div class="q-title">50 users × 50 files = 2,500 files storage cost</div>
+  <div class="q-body">
+    <p>Average DDLR order PDF: ~200KB. 2,500 files × 200KB = ~500MB. Supabase free tier gives 1GB storage. <strong>This is fine for Phase 0-1.</strong></p>
+    <p>At 500 users: 25,000 files = ~5GB. Supabase Pro gives 100GB for $25/month. Still fine.</p>
+    <p><strong>The real cost isn't storage — it's database egress.</strong> Supabase free tier limits data transfer to 2GB/month. Each AI call that reads 5 reference orders from storage = ~50KB. 500 users × 20 orders/month × 50KB = 500MB transfer. OK for now.</p>
+    <div class="fix"><strong>Fix:</strong> Not a problem until 200+ users. Monitor storage and transfer in Supabase dashboard.</div>
+  </div>
+</div>
+
+<div class="q-card warning">
+  <div class="q-num">Question 12 <span class="severity sev-warning">WARNING</span></div>
+  <div class="q-title">Sarvam rate limits → profitability collapse</div>
+  <div class="q-body">
+    <p>The entire profitability model rests on <strong>"Sarvam 105B is FREE."</strong> But Sarvam's free tier gives ₹1,000 in credits — not unlimited free usage. The Startup Program gives 6-12 months of free credits, but the exact amount is not publicly documented.</p>
+    <p><strong>If Sarvam free credits run out or rate limits hit:</strong></p>
+    <ul>
+      <li>Sarvam Pro: ₹10,000/month (for 200 req/min)</li>
+      <li>All 4 packs go from "profitable" to "₹10K fixed cost eating margins"</li>
+      <li>At 50 users × 20 orders/month = 1,000 orders. Revenue: ~₹20,000. Sarvam cost: ₹10,000. Margin: 50% — survivable but tight.</li>
+      <li>At 20 users: Revenue: ~₹8,000. Sarvam cost: ₹10,000. <strong>Net loss.</strong></li>
+    </ul>
+    <div class="fix"><strong>Fix:</strong> Get Sarvam Startup Program credits CONFIRMED with exact numbers before building the entire cost model around "free." Have a fallback: Gemini 2.5 Flash (cheap, 1M context) or self-hosted Sarvam on GPU (complex but no per-call cost). Add a "break-even user count" to the pricing model.</div>
+  </div>
+</div>
+
+<div class="q-card warning">
+  <div class="q-num">Question 13 <span class="severity sev-warning">WARNING</span></div>
+  <div class="q-title">Model deprecation risk</div>
+  <div class="q-body">
+    <p>Sarvam 105B is an <strong>open-source model</strong>. Even if Sarvam (the company) discontinues the API, the model weights are available. You could self-host. But self-hosting a 105B parameter model requires serious GPU infrastructure (~₹50,000-80,000/month for A100 instances).</p>
+    <p>More realistic risk: Sarvam changes pricing tiers or rate limits. This has happened with every AI startup (OpenAI, Anthropic, Cohere all raised prices after initial free/cheap tiers).</p>
+    <div class="fix"><strong>Fix:</strong> The blueprint's "model-agnostic" principle is correct. Keep the abstraction layer. But also test Gemini 2.5 Flash and Llama 3.3 as backup models NOW, not "after Phase 0." A 2-hour benchmark today prevents a crisis later.</div>
+  </div>
+</div>
+</div>
+
+<!-- SECTION D: YC PARTNER SIM -->
+<div class="section">
+<h2 class="section-title">D. YC PARTNER SIMULATION</h2>
+
+<div class="q-card">
+  <div class="q-num">Question 14</div>
+  <div class="q-title">First 3 questions a YC partner would ask</div>
+  <div class="q-body">
+    <p><strong>Q1: "How many people are using this right now?"</strong><br>
+    Answer: 1 tester (Banu). Zero paying users. Zero revenue. This is the weakest point. YC wants traction, not blueprints. You need 5-10 users ASAP.</p>
+    <p><strong>Q2: "Why can't they just use ChatGPT/Gemini with a good prompt?"</strong><br>
+    Answer: They can, for ~80% quality. Your moat is the 576-order training set, auto-prompt, guardrails, and DOCX output. But this moat is thin — any caseworker with Claude Projects can upload their own orders today. Your real moat needs to be distribution and trust, not technology.</p>
+    <p><strong>Q3: "What happens when Google translates their Document AI to Kannada government orders?"</strong><br>
+    Answer: You lose. Unless you already have 500+ users with switching costs (their uploaded orders, their customized prompts, their workflow). Speed to market is the only defense.</p>
+  </div>
+</div>
+
+<div class="q-card">
+  <div class="q-num">Question 15</div>
+  <div class="q-title">TAM ₹50-75 lakh/year — VC-fundable or lifestyle?</div>
+  <div class="q-body">
+    <p><strong>₹50-75 lakh ($60-90K) is a lifestyle business.</strong> YC companies need $100M+ TAM potential. Even at 100% market capture (impossible), this is a ₹75L/year business. That's a good solo founder income, not a venture-scale company.</p>
+    <p><strong>To be VC-fundable, you need to 10x the TAM:</strong></p>
+    <ul>
+      <li>Expand to all Indian states (28 states × 5-10K caseworkers = 140K-280K users)</li>
+      <li>Expand to all government departments (not just land records)</li>
+      <li>TAM becomes ₹50-100 crore/year — now it's interesting</li>
+    </ul>
+    <p><strong>Honest answer: Build it as a profitable lifestyle business first. Get 100 Karnataka users. Then decide if you want to raise money to go national.</strong></p>
+  </div>
+</div>
+
+<div class="q-card">
+  <div class="q-num">Question 16</div>
+  <div class="q-title">What makes this fundable?</div>
+  <div class="q-body">
+    <p><strong>Today: Not fundable.</strong> Zero users, zero revenue, solo non-technical founder, AI wrapper on top of Sarvam/Claude.</p>
+    <p><strong>Fundable IF:</strong></p>
+    <ul>
+      <li>50+ paying users across 3+ districts (proves demand beyond Banu's friendship)</li>
+      <li>Clear expansion path to other states or departments</li>
+      <li>A technical co-founder (real human, not Claude)</li>
+      <li>Retention data: do users come back month after month?</li>
+      <li>Unit economics: prove ₹24K/year/office works at 100+ offices</li>
+    </ul>
+    <p><strong>The ELEVATE grant (mentioned in Phase 3) is more realistic than VC funding for the next 12 months.</strong></p>
+  </div>
+</div>
+</div>
+
+<!-- SECTION E: TECH SWOT -->
+<div class="section">
+<h2 class="section-title">E. TECHNOLOGY SWOT</h2>
+
+<div class="q-card">
+  <div class="q-num">Question 17</div>
+  <div class="q-title">Tech-focused SWOT analysis</div>
+  <div class="q-body">
+    <div class="swot">
+      <div class="swot-box swot-s">
+        <h4>Strengths</h4>
+        <ul>
+          <li>576 real orders = genuine training data moat</li>
+          <li>Model-agnostic design (can switch Sarvam → Gemini → Claude)</li>
+          <li>Smart-context approach (16K vs 125K) is architecturally sound</li>
+          <li>7 guardrails = defense-in-depth, not single point of failure</li>
+          <li>Working prototype exists (Streamlit, 713 lines)</li>
+        </ul>
+      </div>
+      <div class="swot-box swot-w">
+        <h4>Weaknesses</h4>
+        <ul>
+          <li>No technical co-founder (Claude is not a co-founder)</li>
+          <li>Single-model dependency (Sarvam for cost model)</li>
+          <li>No rollback on reference corrections</li>
+          <li>Self-validation has known bias issues</li>
+          <li>Blueprint infrastructure costs are understated by ~40%</li>
+        </ul>
+      </div>
+      <div class="swot-box swot-o">
+        <h4>Opportunities</h4>
+        <ul>
+          <li>No direct Kannada govt order competitor exists</li>
+          <li>India's Land-Stack digitization creates demand</li>
+          <li>Open-source Sarvam 105B = potential self-hosting</li>
+          <li>WhatsApp bot could 5x adoption vs web app</li>
+          <li>DPDPA compliance as marketing advantage</li>
+        </ul>
+      </div>
+      <div class="swot-box swot-t">
+        <h4>Threats</h4>
+        <ul>
+          <li>Draft Bot Pro (427K users) adds Kannada support</li>
+          <li>Google/Microsoft builds free govt document AI</li>
+          <li>Sarvam pricing changes destroy cost model</li>
+          <li>KSWAN firewalls block the app</li>
+          <li>Government policy change mandates specific software</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="q-card critical">
+  <div class="q-num">Question 18 <span class="severity sev-critical">CRITICAL</span></div>
+  <div class="q-title">#1 tech decision that could be wrong</div>
+  <div class="q-body">
+    <p><strong>Rewriting from Streamlit to Next.js during a 10-day deadline.</strong></p>
+    <p>You have a working 713-line Streamlit app. It does OCR, generation, DOCX output, 13 AI models. It works on localhost. Instead of deploying it, the blueprint says "throw it away and rebuild in Next.js in 3 days."</p>
+    <p>This is the classic "shiny new framework" trap. Streamlit is ugly? Yes. But ugly-and-shipped beats beautiful-and-unfinished. Every startup that died did so because they rebuilt instead of shipped.</p>
+    <p><strong>If this decision is wrong, it costs you the April 5 deadline AND the working prototype.</strong></p>
+  </div>
+</div>
+
+<div class="q-card">
+  <div class="q-num">Question 19</div>
+  <div class="q-title">If rebuilding from scratch, one thing to change</div>
+  <div class="q-body">
+    <p><strong>Start with the correction feedback loop, not the generation pipeline.</strong></p>
+    <p>The blueprint focuses on "generate orders." But the real product is "generate orders that get better over time." The correction → reference update → quality improvement loop is what creates the moat. Without it, you're just a ChatGPT wrapper with Kannada formatting.</p>
+    <p>If I rebuilt from scratch: Day 1-3 = simple generation (even with ChatGPT). Day 4-7 = correction tracking + reference versioning + quality scoring. Day 8-10 = self-improvement pipeline. The generation quality catches up. The learning loop is what competitors can't copy.</p>
+  </div>
+</div>
+</div>
+
+<!-- SECTION F: TOP RECOMMENDATIONS -->
+<div class="section">
+<h2 class="section-title">F. TOP 3 RECOMMENDATIONS</h2>
+
+<div class="reco">
+  <h4>1. DON'T REWRITE — DEPLOY STREAMLIT NOW</h4>
+  <p>Put the existing 713-line Streamlit app on a ₹500/month Indian VPS (Hetzner India, DigitalOcean Bangalore, or AWS Lightsail Mumbai). Add basic auth with streamlit-authenticator. Give Banu the URL by March 31. Rewrite to Next.js in Phase 1A (April 6-20) with zero deadline pressure. <strong>This one change makes April 5 achievable.</strong></p>
+</div>
+
+<div class="reco">
+  <h4>2. FIX THE COST MODEL — IT'S WRONG BY 40%</h4>
+  <p>The blueprint says ₹2,100-3,350/month. Reality: Supabase Pro ($25) + VPS ($10-20) + Sarvam Vision (₹2,999 in Phase 1) = ₹5,000-7,000/month. Still very cheap! But don't build a business on wrong numbers. Correct the cost table before showing to anyone. Add a "break-even user count" calculation: how many paying users to cover fixed costs?</p>
+</div>
+
+<div class="reco">
+  <h4>3. ADD VERSION CONTROL TO REFERENCE ORDERS</h4>
+  <p>Before a single correction replaces a single original, build the version chain. 2 extra columns in the database: <code>version_number</code> and <code>parent_id</code>. "Revert to original" button. This prevents the single most dangerous data corruption path in the entire system. 30 minutes of work that saves months of pain.</p>
+</div>
+</div>
+
+<div style="margin-top: 3rem; padding: 1.5rem; background: var(--card); border-radius: 10px; text-align: center;">
+  <p style="color: var(--muted); font-size: 0.85rem;">Red Team Audit by Independent Consultant | March 28, 2026</p>
+  <p style="color: var(--muted); font-size: 0.8rem; margin-top: 0.3rem;">Blueprint grade: <strong style="color: #fbbf24;">C+</strong> — Good product idea, flawed execution plan, fixable with 3 changes above.</p>
+</div>
+
+</body>
+</html>

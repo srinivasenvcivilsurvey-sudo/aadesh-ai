@@ -1,0 +1,88 @@
+{
+  "monthly_budget_usd": 35,
+  "entries": [
+    {
+      "date": "2026-03-30",
+      "vps_cost_daily_usd": 0.39,
+      "api_cost_usd": 0,
+      "orders_free": 0,
+      "orders_premium": 0,
+      "notes": "ALERT: Second confirmed outage at 16:34 IST. Site aadesh-ai.in is DOWN (ECONNREFUSED). VPS IP 165.232.176.181. First outage was 11:13-11:16 (3 min). This second outage started ~16:29 and is still active at 16:34. Srinivas must manually restart Nginx/PM2 on VPS. No order costs — 0 orders today. All Paperclip agent costs are subscription_included.",
+      "paperclip_agent_runs": {
+        "total_runs_succeeded": 13,
+        "total_runs_failed": 16,
+        "total_cost_equivalent_usd": 4.3798,
+        "billing_type": "subscription_included",
+        "incremental_cost_usd": 0,
+        "by_agent": {
+          "Arvind": 1.1808,
+          "Ravi": 1.0235,
+          "Banu-Bot": 0.8647,
+          "Lakshmi": 0.8645,
+          "Priya": 0.4463
+        }
+      },
+      "site_events": [
+        {
+          "time": "2026-03-30T11:13:40",
+          "event": "OUTAGE",
+          "detail": "HTTP 0 — connection refused"
+        },
+        {
+          "time": "2026-03-30T11:16:30",
+          "event": "RECOVERED",
+          "detail": "HTTP 200"
+        },
+        {
+          "time": "2026-03-30T16:29:00",
+          "event": "CHECK_FAIL",
+          "detail": "HTTP 000 from local agent check — possible second outage or local network issue"
+        },
+        {
+          "time": "2026-03-30T16:34:00",
+          "event": "OUTAGE_CONFIRMED",
+          "detail": "ECONNREFUSED 165.232.176.181:443 — confirmed via curl + WebFetch. Site is DOWN. Nginx or Next.js app may be crashed on VPS."
+        }
+      ],
+      "monthly_total_usd": 12.00,
+      "monthly_budget_usd": 35.00,
+      "budget_remaining_usd": 23.00
+    },
+    {
+      "date": "2026-04-16",
+      "vps_cost_daily_usd": 0.40,
+      "vps_cost_month_to_date_usd": 6.40,
+      "api_cost_usd": 1.25,
+      "api_cost_breakdown": {
+        "sarvam_usd": 0,
+        "anthropic_openrouter_usd": 1.25,
+        "note": "29 orders in Supabase as of 2026-04-13. Estimate: ~50% premium (Sonnet) × 29 × $0.086 = ~$1.25. Conservative estimate — actual may be lower if most orders used Sarvam free model."
+      },
+      "orders_free": 15,
+      "orders_premium": 14,
+      "orders_total_supabase": 29,
+      "orders_dev_test_local": 5,
+      "cost_per_order_premium_usd": 0.086,
+      "cost_per_order_free_usd": 0,
+      "notes": "First Priya run. Pulled data from: Supabase (29 orders, 6 users via TEAM_LOG 2026-04-13), CTMO audit (actual cost Rs 3-4/order = ~$0.043-0.048), cost_log.json (March 30 baseline). VPS upgraded to $0.40/day estimate (DigitalOcean). All Paperclip agents are subscription_included — zero incremental cost. Streamlit app has 5 dev/test orders in generated_orders folder (not counted as production).",
+      "monthly_total_to_date_usd": 7.65,
+      "monthly_budget_usd": 35,
+      "budget_remaining_usd": 27.35,
+      "budget_status": "ON TRACK",
+      "data_sources": [
+        "TEAM_LOG.md (2026-04-13 — Supabase: 6 users, 29 orders)",
+        "CTMO Audit (2026-04-12 — cost Rs 3.59/order confirmed)",
+        "cost_log.json (2026-03-30 baseline)",
+        "KarnatakaAI/11_DDLR_App/logs/ddlr_app.log (last 30 lines — PDF errors, no order count)",
+        "generated_orders/ folder (5 dev/test files)"
+      ]
+    }
+  ],
+  "cumulative_summary": {
+    "total_orders_ever": 29,
+    "total_api_cost_usd": 1.25,
+    "total_vps_cost_usd_april": 6.40,
+    "paperclip_agents_cost_usd": 0,
+    "subscription_included_value_usd": 4.38
+  }
+}
