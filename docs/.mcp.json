@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "TestSprite": {
+      "command": "npx",
+      "args": [
+        "@testsprite/testsprite-mcp@latest"
+      ],
+      "env": {
+        "API_KEY": "ROTATE_THIS_KEY_REGENERATE_FROM_TESTSPRITE_DASHBOARD"
+      }
+    },
+    "code-review-graph": {
+      "command": "C:\\Users\\north\\AppData\\Local\\Python\\pythoncore-3.14-64\\Scripts\\code-review-graph.exe",
+      "args": [
+        "serve",
+        "--repo",
+        "C:\\Users\\north\\OneDrive\\Attachments\\Desktop\\Banu\\aadesh-ai"
+      ],
+      "type": "stdio"
+    }
+  }
+}
