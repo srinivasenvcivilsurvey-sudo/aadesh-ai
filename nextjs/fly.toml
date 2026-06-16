@@ -1,0 +1,45 @@
+# fly.toml — Aadesh AI | Fly.io free-tier deployment
+# Region: bom (Mumbai) — lowest latency for Karnataka government users
+# Platform: Fly.io Machines (always-on Docker, no serverless body-size limits)
+
+app = 'aadesh-ai'
+primary_region = 'bom'
+
+# ── Docker build ─────────────────────────────────────────────────────────────
+# NEXT_PUBLIC_* must be baked in at build time.
+# These are intentionally public values (Supabase anon key is safe client-side).
+# Server-side secrets (API keys etc.) are set via: fly secrets set KEY=VALUE
+[build]
+  dockerfile = 'Dockerfile'
+  [build.args]
+    NEXT_PUBLIC_SUPABASE_URL      = 'https://uyxkjhzaqmzoqvjodhcb.supabase.co'
+    NEXT_PUBLIC_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV5eGtqaHphcW16b3F2am9kaGNiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2NzM3NzMsImV4cCI6MjA5MDI0OTc3M30.tmqQm0Ultt6Z1taSINntbMQf8hhWBDfJVxXmOqIZQCk'
+    NEXT_PUBLIC_PRODUCTNAME       = 'Aadesh AI'
+    NEXT_PUBLIC_THEME             = 'theme-sass3'
+    NEXT_PUBLIC_SSO_PROVIDERS     = 'google'
+    NEXT_PUBLIC_SITE_URL          = 'https://aadesh-ai.in'
+
+# ── HTTP service ─────────────────────────────────────────────────────────────
+[http_service]
+  internal_port        = 3000
+  force_https          = true
+  auto_stop_machines   = false   # ALWAYS ON — do not sleep
+  auto_start_machines  = true
+  min_machines_running = 1
+  processes            = ['app']
+
+# ── VM size (free tier: shared-cpu-1x, 256MB) ────────────────────────────────
+[[vm]]
+  size   = 'shared-cpu-1x'
+  memory = '256mb'
+
+# ── Health check ─────────────────────────────────────────────────────────────
+[checks]
+  [checks.health]
+    grace_period = '30s'
+    interval     = '15s'
+    method       = 'GET'
+    path         = '/api/health'
+    port         = 3000
+    timeout      = '10s'
+    type         = 'http'
